@@ -24,8 +24,6 @@ var/
 *.egg
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -75,9 +73,6 @@ target/
 # Jupyter NB Checkpoints
 .ipynb_checkpoints/
 
-# exclude data from source control by default
-/data/
-
 # Mac OS-specific storage files
 .DS_Store
 
@@ -87,3 +82,38 @@ target/
 
 # Mypy cache
 .mypy_cache/
+
+# Data files (keep .gitkeep)
+/data/raw/*
+!/data/raw/.gitkeep
+/data/interim/*
+!/data/interim/.gitkeep
+/data/processed/*
+!/data/processed/.gitkeep
+/data/external/*
+!/data/external/.gitkeep
+
+# MLflow
+/mlruns/
+/mlartifacts/
+
+# Models (keep .gitkeep)
+/models/*
+!/models/.gitkeep
+
+# Reports (keep .gitkeep)
+/reports/figures/*
+!/reports/figures/.gitkeep
+
+# Environments
+.venv/
+venv/
+ENV/
+
+# IDE
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
