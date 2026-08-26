@@ -326,23 +326,36 @@ test: agregar tests para train_model
 
 ---
 
-## 11. Entregables
+## 11. Estado Actual del Proyecto
 
-| Entregable | Estado |
-|------------|--------|
-| README.md con estructura completa | Completado |
-| Notebooks (4 notebooks) | Completado |
-| Codigo reusable (src/) | Completado |
-| Scripts de ejecucion | Completado |
-| Estructura de repositorio | Completado |
-| .gitignore, requirements.txt | Completado |
-| Dataset de ejemplo | Completado |
-| Modelos entrenados | Completado |
-| Graficas de evaluacion | Completado |
-| Experimentos en MLflow/DagsHub | Pendiente (configurar DagsHub) |
-| Release v1.0.0 | Pendiente |
-| PR mergeado (development -> main) | Pendiente |
-| Documentacion de estrategia Git | Pendiente |
+### Pipeline ML completado
+- **Dataset**: 7,043 clientes de telecomunicaciones (sintetico, reemplazar con Kaggle real)
+- **Modelos evaluados**: Logistic Regression, Random Forest, Gradient Boosting
+- **Mejor modelo**: Gradient Boosting (ROC-AUC ~0.74)
+- **Features**: 32 (originales + One-Hot Encoding + derivadas)
+- **Notebooks ejecutados**: EDA, Preprocessing, Training, Agentic RAG
+
+### Componente Agentic completado
+- **Motor RAG**: Retrieval de documentos de churn con estadisticas historicas
+- **Agente**: Explica predicciones, genera recomendaciones de retencion, responde preguntas en lenguaje natural
+
+### Git completado
+- Ramas `main` y `development` creadas
+- Merge de `development` a `main` realizado
+- Tag `v1.0.0` creado localmente
+
+---
+
+## 12. Pendiente para Entrega Final
+
+| Tarea | Descripcion | Estado |
+|-------|-------------|--------|
+| Dataset real | Descargar Telco Customer Churn de Kaggle y reemplazar el sintetico | Pendiente |
+| DagsHub/MLflow | Configurar tracking remoto y subir experimentos con metricas, parametros y artefactos | Pendiente |
+| Push a GitHub | `git push origin main --tags` para subir todo al repositorio remoto | Pendiente |
+| Release v1.0.0 | Crear Release en GitHub con release notes detalladas | Pendiente |
+| Documentacion Git | Documentar la estrategia de ramas y flujo de trabajo utilizada | Pendiente |
+| Pull Request | Crear PR formal documentando los cambios (si se usa GitHub Flow) | Pendiente |
 
 ---
 
