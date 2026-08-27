@@ -1,38 +1,49 @@
 """
-Script de preprocesamiento de datos
------------------------------------
-Carga el dataset raw, aplica transformaciones y guarda los datos procesados.
+Script de preprocesamiento
+---------------------------
+Limpia, aplica ingenieria de features y divide el dataset de Spotify en
+train/test estratificado por la categoria de popularidad.
 """
-import os
-import click
-import pandas as pd
+from __future__ import annotations
+
+import sys
 from pathlib import Path
 
-# Configurar rutas
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-RAW_DATA_PATH = PROJECT_DIR / "data" / "raw" / "telco_customer_churn.csv"
-PROCESSED_DATA_PATH = PROJECT_DIR / "data" / "processed"
+sys.path.insert(0, str(PROJECT_DIR))
+
+from src.data.preprocess import (
+    load_data,
+    clean_data,
+    split_data,
+)
+from src.features.build_features import build_features
+
+RAW_PATH = PROJECT_DIR / "data" / "raw" / "spotify_data_processed.csv"
+PROCESSED_DIR = PROJECT_DIR / "data" / "processed"
+PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@click.command()
-@click.option("--input", default=str(RAW_DATA_PATH), help="Ruta al archivo raw")
-@click.option("--output", default=str(PROCESSED_DATA_PATH), help="Ruta de salida")
-def main(input: str, output: str):
-    """Ejecuta el pipeline de preprocesamiento."""
-    click.echo("Cargando datos...")
-    df = pd.read_csv(input)
-    click.echo(f"Dimensiones originales: {df.shape}")
+def main():
+    print("Cargando dataset crudo...")
+    df = load_data(str(RAW_PATH))
+    print(f"  Registros crudos: {len(df)}")
 
-    # TODO: Agregar pipeline de preprocesamiento
-    # - Manejar valores faltantes
-    # - Codificar variables categóricas
-    # - Escalar variables numéricas
-    # - Feature engineering
+    df = clean_data(df)
+    print(f"  Tras limpieza: {len(df)}")
 
-    # Guardar datos procesados
-    os.makedirs(output, exist_ok=True)
-    df.to_csv(os.path.join(output, "processed_data.csv"), index=False)
-    click.echo(f"Datos guardados en: {output}")
+    df = build_features(df)
+    print("  Features derivadas anadidas.")
+
+    X_train, X_test, y_train, y_test = split_data(df)
+    train = X_train.copy()
+    train["popularity_category"] = y_train.values
+    test = X_test.copy()
+    test["popularity_category"] = y_test.values
+
+    train.to_csv(PROCESSED_DIR / "train.csv", index=False)
+    test.to_csv(PROCESSED_DIR / "test.csv", index=False)
+    print(f"Guardado train.csv ({train.shape}) y test.csv ({test.shape}) en {PROCESSED_DIR}")
 
 
 if __name__ == "__main__":

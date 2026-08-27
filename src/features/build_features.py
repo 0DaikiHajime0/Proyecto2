@@ -1,52 +1,40 @@
 """
-Modulo de feature engineering
-------------------------------
-Funciones para crear y transformar features.
+Ingenieria de features para el dataset de Spotify
+-------------------------------------------------
+Crea variables derivadas a partir de los metadatos y caracteristicas de
+audio de los tracks. Todas las features son calculables antes de conocer
+la popularidad, por lo que no introducen fuga de informacion.
 """
+from __future__ import annotations
+
 import pandas as pd
-import numpy as np
 
 
-def create_tenure_groups(df: pd.DataFrame) -> pd.DataFrame:
-    """Crea grupos de tenure."""
+def build_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Anade features derivadas al dataframe de Spotify.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame con las columnas originales del dataset.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame con las nuevas features anadidas.
+    """
     df = df.copy()
-    if 'tenure' in df.columns:
-        df['tenure_group'] = pd.cut(
-            df['tenure'],
-            bins=[0, 12, 24, 36, 48, 60, 72],
-            labels=['0-12', '13-24', '25-36', '37-48', '49-60', '61-72']
-        )
-    return df
 
+    # Interaccion entre bailabilidad y energia: proxy de "pegajosidad" del track.
+    if "danceability" in df.columns and "energy" in df.columns:
+        df["dance_energy"] = df["danceability"] * df["energy"]
 
-def create_charge_ratio(df: pd.DataFrame) -> pd.DataFrame:
-    """Crea ratio de cargo mensual vs total."""
-    df = df.copy()
-    if 'MonthlyCharges' in df.columns and 'TotalCharges' in df.columns:
-        df['charge_ratio'] = df['MonthlyCharges'] / (df['TotalCharges'] + 1)
-    return df
+    # Indicador de lanzamiento reciente (era de streaming mas competitiva).
+    if "release_year" in df.columns:
+        df["is_recent_release"] = (df["release_year"] >= 2020).astype(int)
 
+    # Densidad de streams esperada por track del artista (proxy de exposicion).
+    if "artist_track_count" in df.columns:
+        df["artist_exposure"] = 1.0 / (df["artist_track_count"].clip(lower=1))
 
-def create_service_count(df: pd.DataFrame) -> pd.DataFrame:
-    """Cuenta el numero de servicios contratados."""
-    df = df.copy()
-    service_cols = [
-        'PhoneService', 'InternetService', 'OnlineSecurity',
-        'OnlineBackup', 'DeviceProtection', 'TechSupport',
-        'StreamingTV', 'StreamingMovies'
-    ]
-    existing = [c for c in service_cols if c in df.columns]
-    if existing:
-        df['total_services'] = df[existing].apply(
-            lambda x: sum(1 for v in x if v in ['Yes', 'DSL', 'Fiber optic']),
-            axis=1
-        )
-    return df
-
-
-def build_all_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Aplica todas las transformaciones de features."""
-    df = create_tenure_groups(df)
-    df = create_charge_ratio(df)
-    df = create_service_count(df)
     return df

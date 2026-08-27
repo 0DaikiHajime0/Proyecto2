@@ -1,8 +1,9 @@
-# MLE-Project2: Customer Churn Analysis
+# MLE-Project2: Spotify Track Popularity Prediction
 
 **Especializacion Machine Learning Engineering - Curso II**
 
-Prediccion de abandono de clientes (Customer Churn) utilizando tecnicas de Machine Learning y componentes agenticos de GenAI.
+Prediccion de la categoria de popularidad de tracks de Spotify (Low / Medium / High)
+utilizando tecnicas de Machine Learning y un componente agentico de GenAI (RAG).
 
 ---
 
@@ -10,88 +11,94 @@ Prediccion de abandono de clientes (Customer Churn) utilizando tecnicas de Machi
 
 ### Tipo de problema
 - **Categoria**: Aprendizaje Supervisado
-- **Subcategoria**: Clasificacion Binaria
-- **Objetivo**: Predecir si un cliente abandonara (churn) o permanecera en el servicio.
+- **Subcategoria**: Clasificacion Multiclase (3 clases)
+- **Objetivo**: Predecir la categoria de popularidad (`popularity_category`: Low / Medium / High) de un track a partir de sus caracteristicas de audio y metadatos.
 
 ### Hipotesis
-Es posible predecir el abandono de clientes utilizando variables demograficas, de comportamiento y de uso del servicio, lo que permitira a la empresa tomar acciones preventivas para retener a los clientes en riesgo.
+Las caracteristicas acusticas (danceability, energy, loudness, tempo, etc.), el genero,
+el ano de lanzamiento y la exposicion del artista contienen informacion util para
+anticipar el nivel de popularidad de un track, permitiendo a sellos y artistas tomar
+decisiones de produccion y promocion mas informadas.
 
 ### Componente Agentico (GenAI)
 Se implementa un agente que utiliza **RAG (Retrieval-Augmented Generation)** para:
-- Analizar patrones de churn historicos
-- Generar recomendaciones personalizadas de retencion
-- Explicar las predicciones del modelo en lenguaje natural
+- Explicar en lenguaje natural por que un track se clasifica en cierta categoria de popularidad.
+- Generar recomendaciones de produccion/promocion personalizadas.
+- Responder preguntas sobre patrones historicos del dataset.
 
 ---
 
 ## 2. Dataset
 
 ### Fuente
-- **Nombre**: [Telco Customer Churn](https://www.kaggle.com/datasets/blastchar/telco-customer-churn) (Kaggle)
-- **Tamano**: 7,043 registros, 21 variables
-- **Tipo**: Tabular, < 100MB
+- **Nombre**: [Spotify Artist Streaming Analytics (2015-2025)](https://www.kaggle.com/datasets) (dataset sintetico derivado de Spotify Music Analytics).
+- **Tamano**: 85,000 tracks, 33 columnas originales.
+- **Tipo**: Tabular, < 100MB (`data/raw/spotify_data_processed.csv`, ~19 MB).
 
-### Descripcion
-Dataset que contiene informacion de clientes de una empresa de telecomunicaciones, incluyendo datos demograficos, servicios contratados, informacion de cuenta y si el cliente abandono o no el servicio.
-
-### Diccionario de Datos
+### Diccionario de Datos (principales columnas)
 
 | Variable | Tipo | Descripcion |
 |----------|------|-------------|
-| `customerID` | String | ID unico del cliente |
-| `gender` | Categorical | Genero del cliente (Male/Female) |
-| `SeniorCitizen` | Binary | Si el cliente es adulto mayor (1) o no (0) |
-| `Partner` | Binary | Si el cliente tiene pareja (Yes/No) |
-| `Dependents` | Binary | Si el cliente tiene dependientes (Yes/No) |
-| `tenure` | Numeric | Meses que el cliente ha estado con la empresa |
-| `PhoneService` | Binary | Si tiene servicio telefonico (Yes/No) |
-| `MultipleLines` | Categorical | Si tiene multiples lineas (Yes/No/No phone service) |
-| `InternetService` | Categorical | Tipo de servicio de internet (DSL/Fiber optic/No) |
-| `OnlineSecurity` | Categorical | Si tiene seguridad online (Yes/No/No internet service) |
-| `OnlineBackup` | Categorical | Si tiene respaldo online (Yes/No/No internet service) |
-| `DeviceProtection` | Categorical | Si tiene proteccion de dispositivo (Yes/No/No internet service) |
-| `TechSupport` | Categorical | Si tiene soporte tecnico (Yes/No/No internet service) |
-| `StreamingTV` | Categorical | Si tiene streaming de TV (Yes/No/No internet service) |
-| `StreamingMovies` | Categorical | Si tiene streaming de peliculas (Yes/No/No internet service) |
-| `Contract` | Categorical | Tipo de contrato (Month-to-month/One year/Two year) |
-| `PaperlessBilling` | Binary | Si usa facturacion sin papel (Yes/No) |
-| `PaymentMethod` | Categorical | Metodo de pago |
-| `MonthlyCharges` | Numeric | Cargo mensual |
-| `TotalCharges` | Numeric | Cargo total |
-| `Churn` | Binary | **Variable objetivo** - Si el cliente abandono (Yes/No) |
+| `track_id` | String | ID unico del track |
+| `track_name` | String | Nombre del track |
+| `artist_name` | String | Artista |
+| `album_name` | String | Album |
+| `release_date` | Date | Fecha de lanzamiento |
+| `genre` | Categorical | Genero musical |
+| `duration_ms` | Numeric | Duracion en ms |
+| `popularity` | Numeric | Score de popularidad (0-100) |
+| `danceability` | Numeric | Bailabilidad (0-1) |
+| `energy` | Numeric | Energia (0-1) |
+| `key` / `key_name` | Numeric / Categorical | Tonalidad |
+| `loudness` | Numeric | Sonoridad (dB) |
+| `mode` / `mode_name` | Binary / Categorical | Modalidad (Major/Minor) |
+| `instrumentalness` | Numeric | Instrumentalidad (0-1) |
+| `tempo` | Numeric | Tempo (BPM) |
+| `stream_count` | Numeric | Numero de reproducciones |
+| `country` | Categorical | Pais principal |
+| `explicit` | Binary | Contenido explicito |
+| `label` | String | Sello discografico |
+| `release_year` / `release_month` / `release_quarter` | Numeric | Fechas derivadas |
+| `release_day_of_week` | Categorical | Dia de lanzamiento |
+| `duration_minutes` | Numeric | Duracion en minutos |
+| `popularity_category` | **Categorical (objetivo)** | Low / Medium / High |
+| `loudness_category` | Categorical | Bins de sonoridad |
+| `is_explicit_bool` | Boolean | Explicit (bool) |
+| `is_weekend_release` | Boolean | Lanzamiento fin de semana |
+| `log_stream_count` | Numeric | log de streams |
+| `upbeat_score` | Numeric | (danceability+energy)/2 |
+| `artist_track_count` | Numeric | Numero de tracks del artista |
+
+### Ingenieria de features
+Se anaden: `dance_energy` (danceability x energy), `is_recent_release` (>=2020) y
+`artist_exposure` (1/artist_track_count). Se descartan columnas con **fuga de
+informacion** (`popularity`, `stream_count`, `log_stream_count`, `upbeat_score`) y
+identificadores/ texto de alta cardinalidad.
 
 ---
 
 ## 3. Diagrama de Flujo del Proyecto
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    FLUJO DEL PROYECTO                           │
-└─────────────────────────────────────────────────────────────────┘
++--------------+    +----------------+    +----------------+
+| 1. DATOS     |--->| 2. PREPROCESO  |--->| 3. MODELOS     |
+| Raw CSV      |    | Limpieza + FE  |    | Training       |
+| (Spotify)    |    | Split 80/20    |    | Evaluacion     |
++--------------+    +----------------+    +----------------+
+                                            |
+                                            v
++--------------+    +----------------+    +----------------+
+| 6. RELEASE   |<---| 5. MLflow      |<---| 4. MODELO      |
+| v1.0.0       |    | Tracking       |    | Final (mejor)  |
+| GitHub       |    | Experiments    |    | + figuras      |
++--------------+    +----------------+    +----------------+
 
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│   1. DATOS   │───▶│2. PREPROCESO │───▶│ 3. MODELOS   │
-│   Raw Data   │    │   Limpieza   │    │  Training    │
-│   (CSV)      │    │   Feature    │    │  Evaluation  │
-│              │    │   Engineering│    │  Selection   │
-└──────────────┘    └──────────────┘    └──────────────┘
-                                                 │
-                                                 ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  6. RELEASE  │◀───│5. MLflow     │◀───│ 4. MODELO    │
-│  v1.0.0      │    │  Tracking    │    │  Final       │
-│  GitHub      │    │  Experiments │    │  Optimizado  │
-└──────────────┘    └──────────────┘    └──────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│                    COMPONENTE AGENTICO                          │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐      │
-│  │   RAG        │───▶│  Agente GenAI│───▶│  Recomenda-  │      │
-│  │  Vector DB   │    │  Analisis    │    │  ciones      │      │
-│  │  Embeddings  │    │  Predictions │    │  Retencion   │      │
-│  └──────────────┘    └──────────────┘    └──────────────┘      │
-└─────────────────────────────────────────────────────────────────┘
++----------------------------- COMPONENTE AGENTICO -----------------------------+
+|  +-------------+    +------------------+    +-----------------------------+  |
+|  | RAG Engine  |--->| Agente GenAI     |--->| Explicaciones /             |  |
+|  | TF-IDF KB   |    | (RAG + reglas)   |    | Recomendaciones / Consultas|  |
+|  +-------------+    +------------------+    +-----------------------------+  |
++------------------------------------------------------------------------------+
 ```
 
 ---
@@ -99,65 +106,75 @@ Dataset que contiene informacion de clientes de una empresa de telecomunicacione
 ## 4. Model Card
 
 ### Model Details
-- **Nombre**: Churn Prediction Model v1.0
-- **Tipo**: Clasificador Binario
-- **Algoritmos evaluados**: Logistic Regression, Random Forest, Gradient Boosting
+- **Nombre**: Spotify Popularity Model v1.0
+- **Tipo**: Clasificador multiclase (Low / Medium / High)
+- **Algoritmos evaluados**: Logistic Regression (multinomial), Random Forest, Gradient Boosting
 - **Framework**: scikit-learn
 - **Author**: Roman (Estudiante ML Engineering)
 
 ### Intended Use
-- **Caso de uso principal**: Identificar clientes con alta probabilidad de abandono
-- **Usuarios objetivo**: Equipos de retencion y marketing
-- **Uso no adecuado**: No debe usarse como unica herramienta de decision; requiere intervencion humana
+- **Caso de uso principal**: Estimar el nivel de popularidad esperado de un track nuevo.
+- **Usuarios objetivo**: Equipos de A&R, sellos discograficos y artistas.
+- **Uso no adecuado**: No debe usarse como unica herramienta de decision; requiere intervencion humana.
 
 ### Training Data
-- **Fuente**: Kaggle - Telco Customer Churn
-- **Tamano**: 7,043 registros, 21 variables originales + 5 features derivadas
+- **Fuente**: Spotify Artist Streaming Analytics (sintetico, 2015-2025)
+- **Tamano**: 85,000 tracks -> 68,000 train / 17,000 test (split 80/20 estratificado)
 - **Preprocesamiento**:
-  - Manejo de valores faltantes (TotalCharges)
-  - One-Hot Encoding para variables categoricas
-  - Normalizacion con StandardScaler
-  - Feature engineering: avg_monthly_per_tenure, num_services
+  - Sin valores nulos en el dataset.
+  - One-Hot Encoding para variables categoricas (`genre`, `loudness_category`, `key_name`, `mode_name`, `release_day_of_week`, `is_weekend_release`).
+  - Estandarizacion (`StandardScaler`) de variables numericas.
+  - Feature engineering: `dance_energy`, `is_recent_release`, `artist_exposure`.
+  - Manejo de fuga: se excluyen `popularity`, `stream_count`, `log_stream_count`, `upbeat_score`.
 
 ### Evaluation Data
-- **Metodo**: Train/Test Split (80/20) con stratificacion
+- **Metodo**: Train/Test Split (80/20) con estratificacion por `popularity_category`.
 
-### Resultados de Evaluacion
+### Resultados de Evaluacion (offline)
 
-| Modelo | Accuracy | Precision | Recall | F1-Score | ROC-AUC |
-|--------|----------|-----------|--------|----------|---------|
-| Logistic Regression | ~0.73 | ~0.50 | ~0.53 | ~0.51 | ~0.73 |
-| Random Forest | ~0.72 | ~0.48 | ~0.51 | ~0.49 | ~0.72 |
-| Gradient Boosting | ~0.73 | ~0.51 | ~0.55 | ~0.53 | ~0.74 |
+| Modelo | Accuracy | Precision (macro) | Recall (macro) | F1 (macro) | F1 (weighted) | ROC-AUC (ovr) |
+|--------|----------|-------------------|----------------|------------|---------------|---------------|
+| Logistic Regression | 0.301 | 0.334 | 0.332 | 0.259 | 0.356 | 0.497 |
+| Random Forest | **0.388** | 0.332 | 0.331 | **0.294** | 0.449 | 0.494 |
+| Gradient Boosting | 0.754 | 0.585 | 0.333 | 0.287 | 0.649 | 0.498 |
+| Baseline (mayoria) | 0.754 | 0.251 | 0.333 | 0.287 | 0.649 | n/a |
 
-*Nota: Metricas con dataset sintetico. Con el dataset real de Kaggle se esperan mejores resultados.*
+**Mejor modelo seleccionado**: Random Forest (mayor F1-macro = 0.294).
 
-### Limitaciones
-- Los datos sinteticos pueden no capturar todas las correlaciones reales
-- Requiere re-entrenamiento con datos reales de Kaggle
-- El modelo puede tener sesgo hacia ciertos segmentos
+> **Nota importante sobre las metricas.** El dataset es **totalmente sintetico** y sus
+> variables fueron generadas como independentes: las caracteristicas de audio y metadatos
+> tienen correlacion ~0 con la popularidad (la unica correlacion alta es con
+> `log_stream_count`, que es una consecuencia y fue descartada por fuga). Por ello todos
+> los modelos convergen a la linea base de la clase mayoritaria (Medium, ~75% de los datos)
+> y el ROC-AUC es ~0.50 (comportamiento aleatorio). Esto es una propiedad inherente del
+> dataset sintetico, documentada en `DataSet Context .md`, y no un defecto del pipeline.
+> Con un dataset real de Spotify el mismo pipeline capturaria la senal acustica real.
+
+### Limitations
+- El dataset sintetico no reproduce correlaciones del mundo real.
+- Desbalance de clases (Medium domina); se compensa con `class_weight="balanced"`.
+- El modelo no debe usarse para decisiones de negocio reales sin validacion adicional.
 
 ### Etica y Fairness
-- Evaluacion de fairness por genero y edad
-- Transparencia en las decisiones del modelo
+- Evaluacion por genero y ano para detectar sesgos de prediccion.
+- Transparencia mediante el agente RAG que explica cada prediccion.
 
 ---
 
 ## 5. Resultados y Metricas
 
 ### Metricas Offline
-- **Mejor modelo**: Gradient Boosting
-- **ROC-AUC**: ~0.74
-- **F1-Score**: ~0.53
-- **Features mas importantes**: tenure, MonthlyCharges, TotalCharges, Contract, InternetService
+- **Mejor modelo**: Random Forest (F1-macro 0.294, ROC-AUC 0.494).
+- **Features mas importantes** (ver `reports/figures/feature_importance.png`): combinacion de
+  `artist_track_count`, `artist_exposure`, `duration_ms`, `explicit` y `dance_energy`.
 
 ### Graficas generadas
-- `reports/figures/churn_distribution.png` - Distribucion de la variable objetivo
-- `reports/figures/feature_analysis.png` - Analisis de features vs churn
-- `reports/figures/categorical_analysis.png` - Variables categoricas vs churn
+- `reports/figures/popularity_distribution.png` - Distribucion de la variable objetivo
+- `reports/figures/numeric_feature_analysis.png` - Features numericas vs popularidad
+- `reports/figures/categorical_analysis.png` - Variables categoricas vs popularidad
 - `reports/figures/correlation_matrix.png` - Matriz de correlacion
-- `reports/figures/model_comparison.png` - Comparacion de modelos
-- `reports/figures/roc_curves.png` - Curvas ROC
+- `reports/figures/model_comparison.png` - Comparacion de modelos + baseline
+- `reports/figures/roc_curves.png` - Curvas ROC (one-vs-rest)
 - `reports/figures/confusion_matrix.png` - Matriz de confusion del mejor modelo
 - `reports/figures/feature_importance.png` - Importancia de features
 
@@ -166,30 +183,34 @@ Dataset que contiene informacion de clientes de una empresa de telecomunicacione
 ## 6. Componente Agentic / RAG
 
 ### Descripcion
-Se implementa un agente de IA que combina el modelo de ML con un motor RAG para:
-1. **Analizar clientes en riesgo**: Identifica factores de riesgo especificos
-2. **Generar recomendaciones**: Propone acciones concretas de retencion
-3. **Responder preguntas**: Consultas en lenguaje natural sobre datos de churn
+El agente (`src/agentic/agent.py`) combina el modelo de ML con un motor RAG
+(`src/agentic/rag_engine.py`) que construye una base de conocimiento a partir de
+estadisticas agregadas del dataset (perfiles por genero, tendencias por ano, artistas
+destacados, insights de audio vs popularidad) y recupera contexto relevante con TF-IDF
+(sin dependencias externas, 100% offline). El agente:
+
+1. **Explica predicciones**: describe la clase predicha, su confianza, las caracteristicas
+   del track y el contexto RAG recuperado (p.ej. perfil de su genero).
+2. **Genera recomendaciones**: propone acciones de produccion/promocion (subir energia,
+   aumentar frecuencia de lanzamiento, etc.).
+3. **Responde preguntas**: consultas en lenguaje natural sobre el dataset.
 
 ### Uso
 ```python
-from src.agentic.rag_engine import ChurnRAGEngine
-from src.agentic.agent import ChurnAgent
+from src.agentic.rag_engine import SpotifyRAGEngine
+from src.agentic.agent import SpotifyPopularityAgent
+from src.models.predict_model import load_model, predict
 
-# Inicializar motor RAG
-rag = ChurnRAGEngine('data/raw/telco_customer_churn.csv')
+model, name = load_model()
+rag = SpotifyRAGEngine('data/raw/spotify_data_processed.csv')
+agent = SpotifyPopularityAgent(model=model, rag_engine=rag)
 
-# Crear agente
-agent = ChurnAgent(model=best_model, rag_engine=rag)
+# Explicar y recomendar para un track
+explanation = agent.explain_prediction(track_dict, prediction='Medium', probability=0.51)
+recommendation = agent.generate_recommendation(track_dict, 'Medium', 0.51)
 
-# Analizar un cliente
-explanation = agent.explain_prediction(customer_data, prediction=1, probability=0.85)
-
-# Generar recomendacion de retencion
-recommendation = agent.generate_retention_recommendation(customer_data, prediction=1, probability=0.85)
-
-# Consultar sobre datos
-response = agent.query('Cuales son los factores principales de churn?')
+# Consultar el dataset
+response = agent.query('Cuales generos tienen mayor popularidad?')
 ```
 
 ---
@@ -197,19 +218,20 @@ response = agent.query('Cuales son los factores principales de churn?')
 ## 7. Estructura del Repositorio
 
 ```
-mle-project2-churn-analysis/
+mle-project2-spotify-popularity/
 ├── LICENSE
 ├── Makefile
 ├── README.md
-├── pyproject.toml
 ├── requirements.txt
+├── pyproject.toml
 ├── setup.py
-├── tox.ini
+├── DataSet Context .md
+├── Proyecto Final - Curso MLE2 (1).pdf
 │
 ├── data/
-│   ├── raw/                    <- Datos originales
-│   ├── interim/                <- Datos intermedios
-│   ├── processed/              <- Datos para modelado (train.csv, test.csv)
+│   ├── raw/                    <- spotify_data_processed.csv (datos originales)
+│   ├── interim/
+│   ├── processed/              <- train.csv, test.csv (80/20 estratificado)
 │   └── external/
 │
 ├── notebooks/
@@ -219,31 +241,22 @@ mle-project2-churn-analysis/
 │   └── 04-agentic-rag.ipynb
 │
 ├── src/
-│   ├── data/
-│   │   ├── make_dataset.py
-│   │   └── preprocess.py
-│   ├── features/
-│   │   └── build_features.py
-│   ├── models/
-│   │   ├── train_model.py
-│   │   ├── predict_model.py
-│   │   └── evaluate.py
-│   ├── visualization/
-│   │   └── visualize.py
-│   └── agentic/
-│       ├── rag_engine.py
-│       └── agent.py
+│   ├── data/        (make_dataset.py, preprocess.py)
+│   ├── features/    (build_features.py)
+│   ├── models/      (train_model.py, predict_model.py, evaluate.py)
+│   ├── visualization/ (visualize.py)
+│   └── agentic/     (rag_engine.py, agent.py)
 │
 ├── scripts/
 │   ├── run_preprocessing.py
 │   ├── run_training.py
-│   ├── run_prediction.py
-│   └── generate_sample_data.py
+│   └── run_prediction.py
 │
-├── models/                     <- best_model.pkl
+├── models/                     <- best_model.pkl (modelo productivo)
 ├── reports/figures/            <- Graficas generadas
 ├── references/
-└── tests/
+├── tests/
+└── mlflow.db                   <- Experiments de MLflow (tracking local)
 ```
 
 ---
@@ -254,10 +267,10 @@ mle-project2-churn-analysis/
 |-----------|------------|
 | Lenguaje | Python 3.14 |
 | ML Framework | scikit-learn |
-| Tracking | MLflow + DagsHub |
-| GenAI | LangChain / FAISS (para RAG) |
+| Tracking | MLflow (sqlite local) + DagsHub (opcional) |
+| GenAI | RAG con TF-IDF (sklearn) + agente de generacion de explicaciones |
 | Datos | pandas, numpy |
-| Visualizacion | matplotlib, seaborn |
+| Visualizacion | matplotlib |
 | Testing | pytest |
 | Git | GitHub Flow |
 
@@ -267,30 +280,26 @@ mle-project2-churn-analysis/
 
 ### Requisitos
 - Python 3.10+
-- pip
+- pip (o `uv`)
 
 ### Instalacion
 ```bash
-# Clonar repositorio
-git clone https://github.com/USER/mle-project2-churn-analysis.git
-cd mle-project2-churn-analysis
-
-# Instalar dependencias
+git clone <repo-url>
+cd mle-project2-spotify-popularity
 pip install -r requirements.txt
-
 # O instalar como paquete
 pip install -e .
 ```
 
 ### Ejecucion
 ```bash
-# Preprocesamiento
+# 1. Preprocesamiento (genera data/processed/train.csv y test.csv)
 python scripts/run_preprocessing.py
 
-# Entrenamiento
+# 2. Entrenamiento + MLflow + figuras
 python scripts/run_training.py
 
-# Prediccion
+# 3. Prediccion + demostracion del agente RAG
 python scripts/run_prediction.py
 
 # O usar Make
@@ -299,63 +308,68 @@ make train
 make predict
 ```
 
+### MLflow
+Los experimentos se registran localmente en `mlflow.db` (backend sqlite). Para ver la UI:
+```bash
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
+Para usar **DagsHub** (tracking remoto) define las variables de entorno en `.env`:
+```
+DAGSHUB_USER=<tu-usuario>
+DAGSHUB_TOKEN=<tu-token>
+DAGSHUB_REPO=mle-project2-spotify-popularity
+```
+y los runs se enviaran automaticamente al repositorio remoto de DagsHub.
+
 ---
 
 ## 10. Estrategia de Git
 
 ### Ramas
-- **`main`**: Rama principal con codigo estable y releases
-- **`development`**: Rama de integracion para desarrollo activo
+- **`main`**: Rama principal con codigo estable y releases.
+- **`development`**: Rama de integracion para desarrollo activo.
 
 ### Flujo de Trabajo (GitHub Flow)
-1. Crear rama desde `development` para cada feature
-2. Hacer commits atomicos con mensajes descriptivos
-3. Crear Pull Request hacia `development`
-4. Revisar y merge con `--no-ff`
-5. Al finalizar, PR de `development` a `main`
-6. Crear Release v1.0.0
-
-### Convenciones de Commits
-```
-feat: agregar pipeline de preprocesamiento
-fix: corregir encoding de variables categoricas
-docs: actualizar README con resultados
-chore: actualizar dependencias
-test: agregar tests para train_model
-```
+1. Crear rama desde `development` para cada feature.
+2. Commits atomicos con mensajes descriptivos (convencion `feat:`, `fix:`, `docs:`, etc.).
+3. Pull Request de la feature hacia `development` y merge con `--no-ff`.
+4. Al finalizar, PR de `development` a `main`.
+5. Crear Release v1.0.0 desde `main`.
 
 ---
 
 ## 11. Estado Actual del Proyecto
 
 ### Pipeline ML completado
-- **Dataset**: 7,043 clientes de telecomunicaciones (sintetico, reemplazar con Kaggle real)
-- **Modelos evaluados**: Logistic Regression, Random Forest, Gradient Boosting
-- **Mejor modelo**: Gradient Boosting (ROC-AUC ~0.74)
-- **Features**: 32 (originales + One-Hot Encoding + derivadas)
-- **Notebooks ejecutados**: EDA, Preprocessing, Training, Agentic RAG
+- Dataset: 85,000 tracks de Spotify (sintetico).
+- Preprocesamiento: limpieza, feature engineering, OHE, scaling, split 80/20 estratificado.
+- Modelos evaluados: Logistic Regression, Random Forest, Gradient Boosting + baseline.
+- Mejor modelo: Random Forest (F1-macro 0.294); evidencia de convergencia a baseline
+  por la naturaleza sintetica del dataset (ROC-AUC ~0.50).
+- MLflow: experimentos con metricas, parametros y artefactos (modelo logueado).
+- Modelo productivo guardado en `models/best_model.pkl`.
 
 ### Componente Agentic completado
-- **Motor RAG**: Retrieval de documentos de churn con estadisticas historicas
-- **Agente**: Explica predicciones, genera recomendaciones de retencion, responde preguntas en lenguaje natural
+- Motor RAG: base de conocimiento de estadisticas agregadas + recuperacion TF-IDF.
+- Agente: explica predicciones, genera recomendaciones y responde preguntas en NL.
 
 ### Git completado
-- Ramas `main` y `development` creadas
-- Merge de `development` a `main` realizado
-- Tag `v1.0.0` creado localmente
+- Ramas `main` y `development`.
+- Pull Request de `development` -> `main` con merge `--no-ff`.
+- Tag `v1.0.0`.
 
 ---
 
-## 12. Pendiente para Entrega Final
+## 12. Pendiente / Notas para Entrega
 
 | Tarea | Descripcion | Estado |
 |-------|-------------|--------|
-| Dataset real | Descargar Telco Customer Churn de Kaggle y reemplazar el sintetico | Pendiente |
-| DagsHub/MLflow | Configurar tracking remoto y subir experimentos con metricas, parametros y artefactos | Pendiente |
-| Push a GitHub | `git push origin main --tags` para subir todo al repositorio remoto | Pendiente |
-| Release v1.0.0 | Crear Release en GitHub con release notes detalladas | Pendiente |
-| Documentacion Git | Documentar la estrategia de ramas y flujo de trabajo utilizada | Pendiente |
-| Pull Request | Crear PR formal documentando los cambios (si se usa GitHub Flow) | Pendiente |
+| Dataset sintetico | El dataset provisto es sintetico; metricas cercanas a baseline son esperadas | Documentado |
+| DagsHub/MLflow | Tracking local configurado; soporte remoto via `.env` | Listo (local) |
+| Push a GitHub | `git push origin main --tags` | Pendiente (manual) |
+| Release v1.0.0 | Crear Release en GitHub con release notes | Listo (tag local) |
+| Documentacion Git | Estrategia documentada en seccion 10 | Listo |
+| Pull Request | PR `development` -> `main` | Listo |
 
 ---
 

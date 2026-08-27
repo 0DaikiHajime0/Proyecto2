@@ -7,8 +7,6 @@ numpy>=1.24.0
 
 # Machine Learning
 scikit-learn>=1.3.0
-xgboost>=2.0.0
-lightgbm>=4.0.0
 
 # MLflow & Experiment Tracking
 mlflow>=2.8.0
@@ -16,20 +14,11 @@ dagshub>=0.3.0
 
 # Visualization
 matplotlib>=3.7.0
-seaborn>=0.12.0
 
-# GenAI / RAG
-langchain>=0.1.0
-langchain-openai>=0.0.1
-faiss-cpu>=1.7.0
-
-# Utilities
+# GenAI / RAG (local, sin dependencias externas; OpenAI/LangChain opcionales)
 python-dotenv>=1.0.0
 click>=8.0.0
+joblib>=1.3.0
 
 # Testing
 pytest>=7.0.0
-flake8>=6.0.0
-
-# Documentation
-Sphinx>=7.0.0

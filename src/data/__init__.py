@@ -1,10 +1,27 @@
-from .make_dataset import load_data
 from .preprocess import (
-    load_data, clean_data, encode_target,
-    feature_engineering, encode_categoricals, scale_features
+    load_data,
+    clean_data,
+    select_features,
+    build_preprocessor,
+    get_feature_names,
+    split_data,
+    make_pipeline,
+    TARGET,
+    NUMERIC_FEATURES,
+    CATEGORICAL_FEATURES,
+    ALL_FEATURES,
 )
 
 __all__ = [
-    'load_data', 'clean_data', 'encode_target',
-    'feature_engineering', 'encode_categoricals', 'scale_features'
+    "load_data",
+    "clean_data",
+    "select_features",
+    "build_preprocessor",
+    "get_feature_names",
+    "split_data",
+    "make_pipeline",
+    "TARGET",
+    "NUMERIC_FEATURES",
+    "CATEGORICAL_FEATURES",
+    "ALL_FEATURES",
 ]

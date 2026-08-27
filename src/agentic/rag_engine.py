@@ -1,107 +1,158 @@
 """
-Motor RAG para analisis de Churn
----------------------------------
-Utiliza Retrieval-Augmented Generation para analizar patrones
-de churn y generar recomendaciones de retencion.
+Motor RAG para analisis de popularidad de Spotify
+-------------------------------------------------
+Utiliza Retrieval-Augmented Generation para construir una base de
+conocimiento a partir del dataset (perfiles por genero, tendencias por
+ano, artistas destacados, insights de audio vs popularidad) y recuperar
+contexto relevante mediante TF-IDF (sin dependencias externas).
 """
-import pandas as pd
-import numpy as np
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Optional
+
+import numpy as np
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+PROJECT_DIR = Path(__file__).resolve().parents[2]
 
 
-class ChurnRAGEngine:
-    """Motor RAG para analisis de churn con embeddings y retrieval."""
+class SpotifyRAGEngine:
+    """Motor RAG sobre estadisticas agregadas del dataset de Spotify."""
 
     def __init__(self, data_path: str = None):
         self.data = None
-        self.documents = []
-        self.vector_store = None
-        self.embeddings = None
+        self.documents: list = []
+        self.doc_metadata: list = []
+        self.vectorizer = None
+        self.doc_vectors = None
         if data_path:
             self.load_data(data_path)
 
+    # ------------------------------------------------------------------ #
     def load_data(self, path: str):
-        """Carga datos historicos de churn como documentos."""
+        """Carga el dataset y construye la base de conocimiento."""
         self.data = pd.read_csv(path)
-        churn_dtype = str(self.data['Churn'].dtype)
-        if churn_dtype in ('object', 'string', 'str'):
-            self.data['Churn'] = self.data['Churn'].map({'Yes': 1, 'No': 0}).astype(float)
-        self.data['TotalCharges'] = pd.to_numeric(self.data['TotalCharges'], errors='coerce')
-        self.data['TotalCharges'] = self.data['TotalCharges'].fillna(self.data['TotalCharges'].median())
-        self.data['num_services'] = 0
-        self.documents = self._create_documents()
-        print(f"Documentos creados: {len(self.documents)}")
-
-    def _create_documents(self) -> list:
-        """Convierte registros en documentos de texto descriptivos."""
-        if self.data is None:
-            return []
-
-        documents = []
-        for _, row in self.data.iterrows():
-            churn_label = "abandono" if row.get('Churn') == 1 else "permanencia"
-
-            doc = (
-                f"Cliente con {row.get('tenure', 0)} meses de antiguedad, "
-                f"cargo mensual de ${row.get('MonthlyCharges', 0):.2f}, "
-                f"cargo total de ${row.get('TotalCharges', 0):.2f}. "
-                f"Contrato: {row.get('Contract', 'N/A')}. "
-                f"Servicio de internet: {row.get('InternetService', 'N/A')}. "
-                f"Servicios contratados: {row.get('num_services', 0)}. "
-                f"Resultado: {churn_label}."
+        if "popularity_category" not in self.data.columns and "popularity" in self.data.columns:
+            self.data["popularity_category"] = pd.cut(
+                self.data["popularity"],
+                bins=[-1, 33, 66, 100],
+                labels=["Low", "Medium", "High"],
             )
-            documents.append(doc)
-        return documents
+        self.build_knowledge_base()
+        print(f"Base de conocimiento creada: {len(self.documents)} documentos")
 
-    def build_vector_store(self):
-        """Construye el vector store con FAISS."""
-        try:
-            from langchain.embeddings import OpenAIEmbeddings
-            from langchain.vectorstores import FAISS
-            from langchain.docstore import InMemoryDocstore
-            from langchain.schema import Document
+    # ------------------------------------------------------------------ #
+    def build_knowledge_base(self):
+        """Genera documentos de texto a partir de estadisticas agregadas."""
+        df = self.data
+        docs, meta = [], []
 
-            docs = [
-                Document(page_content=doc, metadata={"index": i})
-                for i, doc in enumerate(self.documents)
-            ]
+        # 1) Perfil por genero
+        for genre, g in df.groupby("genre"):
+            prof = (
+                f"Genero {genre}: {len(g)} tracks. "
+                f"Popularidad promedio {g['popularity'].mean():.1f} "
+                f"(Low { (g['popularity_category']=='Low').mean():.0%}, "
+                f"Medium {(g['popularity_category']=='Medium').mean():.0%}, "
+                f"High {(g['popularity_category']=='High').mean():.0%}). "
+                f"Audio promedio: danceability {g['danceability'].mean():.2f}, "
+                f"energy {g['energy'].mean():.2f}, "
+                f"loudness {g['loudness'].mean():.1f} dB, "
+                f"tempo {g['tempo'].mean():.0f} BPM. "
+                f"Explicit {g['explicit'].mean():.0%}."
+            )
+            docs.append(prof)
+            meta.append({"type": "genre", "genre": genre})
 
-            self.embeddings = OpenAIEmbeddings()
-            self.vector_store = FAISS.from_documents(docs, self.embeddings)
-            print(f"Vector store construido con {len(docs)} documentos")
-        except ImportError:
-            print("Instalar langchain y faiss para usar RAG")
-        except Exception as e:
-            print(f"Error construyendo vector store: {e}")
+        # 2) Tendencias por ano
+        for year, g in df.groupby("release_year"):
+            prof = (
+                f"Ano {year}: {len(g)} tracks lanzados. "
+                f"Popularidad promedio {g['popularity'].mean():.1f}. "
+                f"Streams promedio {g['stream_count'].mean():.0f}. "
+                f"Porcentaje explicit {g['explicit'].mean():.0%}."
+            )
+            docs.append(prof)
+            meta.append({"type": "year", "year": int(year)})
 
+        # 3) Artistas destacados (top por popularidad promedio, min 3 tracks)
+        artist_stats = (
+            df.groupby("artist_name")
+            .agg(n=("popularity", "size"), pop=("popularity", "mean"))
+            .query("n >= 5")
+            .sort_values("pop", ascending=False)
+            .head(15)
+        )
+        for artist, row in artist_stats.iterrows():
+            prof = (
+                f"Artista {artist}: {int(row['n'])} tracks en el dataset, "
+                f"popularidad promedio {row['pop']:.1f}. "
+                f"Considerado referente de alto rendimiento."
+            )
+            docs.append(prof)
+            meta.append({"type": "artist", "artist": artist})
+
+        # 4) Insights globales de audio vs popularidad
+        for col in ["danceability", "energy", "loudness", "tempo", "instrumentalness", "duration_ms"]:
+            hi = df[df["popularity_category"] == "High"][col].mean()
+            lo = df[df["popularity_category"] == "Low"][col].mean()
+            docs.append(
+                f"En {col}: los tracks de alta popularidad promedian {hi:.2f} "
+                f"mientras que los de baja popularidad promedian {lo:.2f}. "
+                f"Diferencia de {(hi - lo):.2f}."
+            )
+            meta.append({"type": "audio_insight", "feature": col})
+
+        self.documents = docs
+        self.doc_metadata = meta
+        self.vectorizer = TfidfVectorizer(stop_words="english")
+        self.doc_vectors = self.vectorizer.fit_transform(docs)
+
+    # ------------------------------------------------------------------ #
     def retrieve(self, query: str, k: int = 5) -> list:
-        """Recupera documentos relevantes por similitud."""
-        if self.vector_store is None:
-            return self._simple_retrieve(query, k)
-        return self.vector_store.similarity_search(query, k=k)
+        """Recupera los k documentos mas relevantes para la consulta."""
+        if self.vectorizer is None or self.doc_vectors is None:
+            return []
+        q = self.vectorizer.transform([query])
+        sims = cosine_similarity(q, self.doc_vectors).ravel()
+        top_idx = np.argsort(sims)[::-1][:k]
+        return [
+            {"score": float(sims[i]), "text": self.documents[i], "meta": self.doc_metadata[i]}
+            for i in top_idx
+            if sims[i] > 0
+        ]
 
-    def _simple_retrieve(self, query: str, k: int = 5) -> list:
-        """Retrieval basico sin embeddings (fallback)."""
-        query_lower = query.lower()
-        scored = []
-        for i, doc in enumerate(self.documents):
-            score = sum(1 for word in query_lower.split() if word in doc.lower())
-            scored.append((score, doc))
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return [doc for _, doc in scored[:k]]
-
-    def get_churn_stats(self) -> dict:
-        """Retorna estadisticas de churn para contexto."""
+    # ------------------------------------------------------------------ #
+    def get_popularity_stats(self) -> dict:
+        """Estadisticas generales de popularidad para contexto del agente."""
         if self.data is None:
             return {}
-        churn_data = self.data[self.data['Churn'] == 1]
-        no_churn_data = self.data[self.data['Churn'] == 0]
+        df = self.data
         return {
-            "total_clientes": len(self.data),
-            "churn_rate": float(self.data['Churn'].mean()),
-            "avg_tenure_churn": float(churn_data['tenure'].mean()),
-            "avg_tenure_no_churn": float(no_churn_data['tenure'].mean()),
-            "avg_monthly_churn": float(churn_data['MonthlyCharges'].mean()),
-            "avg_monthly_no_churn": float(no_churn_data['MonthlyCharges'].mean()),
-            "top_contract_churn": str(churn_data['Contract'].mode().iloc[0]) if len(churn_data) > 0 else "N/A",
+            "total_tracks": int(len(df)),
+            "avg_popularity": float(df["popularity"].mean()),
+            "pct_high": float((df["popularity_category"] == "High").mean()),
+            "pct_medium": float((df["popularity_category"] == "Medium").mean()),
+            "pct_low": float((df["popularity_category"] == "Low").mean()),
+            "n_genres": int(df["genre"].nunique()),
+            "n_artists": int(df["artist_name"].nunique()),
+            "year_min": int(df["release_year"].min()),
+            "year_max": int(df["release_year"].max()),
+        }
+
+    def get_genre_profile(self, genre: str) -> Optional[dict]:
+        """Devuelve el perfil agregado de un genero."""
+        if self.data is None or genre not in self.data["genre"].unique():
+            return None
+        g = self.data[self.data["genre"] == genre]
+        return {
+            "genre": genre,
+            "n": len(g),
+            "avg_popularity": float(g["popularity"].mean()),
+            "pct_high": float((g["popularity_category"] == "High").mean()),
+            "avg_danceability": float(g["danceability"].mean()),
+            "avg_energy": float(g["energy"].mean()),
         }

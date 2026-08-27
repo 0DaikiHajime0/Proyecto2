@@ -60,6 +60,8 @@ target/
 # Database
 *.db
 *.rdb
+# MLflow experiment store (kept as evidence of tracking)
+!/mlflow.db
 
 # Pycharm
 .idea
@@ -97,9 +99,10 @@ target/
 /mlruns/
 /mlartifacts/
 
-# Models (keep .gitkeep)
+# Models (keep .gitkeep and the production model artifact)
 /models/*
 !/models/.gitkeep
+!/models/best_model.pkl
 
 # Reports (keep .gitkeep)
 /reports/figures/*
