@@ -1,153 +1,152 @@
 """
-Agente de IA para analisis de Churn
-------------------------------------
-Agente que combina predicciones del modelo con RAG para
-generar recomendaciones personalizadas de retencion.
+Agente de IA para analisis de popularidad de Spotify
+-----------------------------------------------------
+Combina las predicciones del modelo de ML con el motor RAG para explicar
+predicciones de popularidad, generar recomendaciones de produccion y
+responder preguntas en lenguaje natural sobre el dataset.
 """
-import pandas as pd
+from __future__ import annotations
+
+from typing import Optional
+
 import numpy as np
-from typing import Optional, Dict, List
-from .rag_engine import ChurnRAGEngine
+import pandas as pd
+
+from .rag_engine import SpotifyRAGEngine
+
+CLASS_DESCRIPTIONS = {
+    "Low": "baja popularidad (pocas reproducciones esperadas)",
+    "Medium": "popularidad media (rendimiento intermedio)",
+    "High": "alta popularidad (potencial de exito)",
+}
 
 
-class ChurnAgent:
-    """Agente de IA para analisis de churn y recomendaciones de retencion."""
+class SpotifyPopularityAgent:
+    """Agente que explica y recomienda acciones sobre la popularidad."""
 
-    def __init__(self, model=None, rag_engine: Optional[ChurnRAGEngine] = None):
+    def __init__(self, model=None, rag_engine: Optional[SpotifyRAGEngine] = None):
         self.model = model
         self.rag_engine = rag_engine
 
-    def explain_prediction(self, customer_data: dict, prediction: int,
-                           probability: float) -> str:
-        """Explica la prediccion para un cliente especifico."""
-        risk_level = "ALTO" if probability > 0.7 else "MEDIO" if probability > 0.4 else "BAJO"
+    # ------------------------------------------------------------------ #
+    def _feature_summary(self, track: dict) -> str:
+        """Resumen legible de las features clave del track."""
+        parts = []
+        for key in ["genre", "danceability", "energy", "tempo", "loudness", "explicit"]:
+            if key in track and track[key] is not None:
+                if key in ("danceability", "energy"):
+                    parts.append(f"{key}={track[key]:.2f}")
+                elif key in ("tempo", "loudness"):
+                    parts.append(f"{key}={track[key]:.1f}")
+                else:
+                    parts.append(f"{key}={track[key]}")
+        return ", ".join(parts)
 
+    # ------------------------------------------------------------------ #
+    def explain_prediction(self, track: dict, prediction: str, probability: float) -> str:
+        """Explica la prediccion para un track especifico usando RAG."""
+        prob = float(np.atleast_1d(probability)[0])
+        confidence = "alta" if prob > 0.6 else "media" if prob > 0.4 else "baja"
         explanation = (
-            f"**Analisis del Cliente**\n\n"
-            f"- Riesgo de churn: {risk_level} ({probability:.1%})\n"
-            f"- Antiguedad: {customer_data.get('tenure', 'N/A')} meses\n"
-            f"- Cargo mensual: ${customer_data.get('MonthlyCharges', 0):.2f}\n"
-            f"- Tipo de contrato: {customer_data.get('Contract', 'N/A')}\n"
-            f"- Servicio internet: {customer_data.get('InternetService', 'N/A')}\n\n"
+            f"**Analisis de popularidad del track**\n\n"
+            f"- Prediccion: {prediction} ({CLASS_DESCRIPTIONS.get(prediction, prediction)})\n"
+            f"- Confianza del modelo: {confidence} ({prob:.1%})\n"
+            f"- Caracteristicas: {self._feature_summary(track)}\n\n"
         )
 
-        if prediction == 1:
-            explanation += self._generate_risk_factors(customer_data)
-        else:
-            explanation += "**Cliente estable.** No se requiere accion inmediata."
+        # Contexto recuperado por RAG (perfil del genero)
+        genre = track.get("genre")
+        retrieved = []
+        if self.rag_engine is not None:
+            if genre:
+                prof = self.rag_engine.get_genre_profile(genre)
+                if prof:
+                    retrieved.append(
+                        f"En el genero {genre}, la popularidad promedio es "
+                        f"{prof['avg_popularity']:.1f} y el {prof['pct_high']:.0%} de tracks "
+                        f"alcanzan alta popularidad (danceability prom={prof['avg_danceability']:.2f}, "
+                        f"energy prom={prof['avg_energy']:.2f})."
+                    )
+            retrieved += [d["text"] for d in self.rag_engine.retrieve(
+                f"{prediction} popularity {genre or ''}", k=2
+            )]
 
+        if retrieved:
+            explanation += "**Contexto relevante (RAG):**\n"
+            explanation += "\n".join(f"- {r}" for r in retrieved[:3]) + "\n\n"
+
+        explanation += self._drivers(track, prediction)
         return explanation
 
-    def _generate_risk_factors(self, customer_data: dict) -> str:
-        """Identifica factores de riesgo del cliente."""
+    # ------------------------------------------------------------------ #
+    def _drivers(self, track: dict, prediction: str) -> str:
+        """Identifica factores que impulsan o limitan la popularidad."""
         factors = []
+        if track.get("danceability", 0) > 0.7:
+            factors.append("- Alta bailabilidad (favorece la difusion)")
+        if track.get("energy", 0) > 0.7:
+            factors.append("- Alta energia (mayor enganche)")
+        if track.get("instrumentalness", 0) > 0.5:
+            factors.append("- Instrumentalidad alta (suele limitar alcance masivo)")
+        if track.get("explicit"):
+            factors.append("- Contenido explicito (puede restringir radios/playlists)")
+        if track.get("artist_track_count", 99) <= 1:
+            factors.append("- Artista con pocos tracks (menor exposicion acumulada)")
+        if not factors:
+            factors.append("- Sin factores de riesgo destacados en las features disponibles")
+        title = "Factores detectados:" if prediction != "High" else "Factores de exito:"
+        return f"**{title}**\n" + "\n".join(factors)
 
-        if customer_data.get('Contract') == 'Month-to-month':
-            factors.append("- Contrato mes a mes (mayor riesgo de abandono)")
-        if customer_data.get('tenure', 0) < 12:
-            factors.append("- Cliente nuevo (< 12 meses)")
-        if customer_data.get('InternetService') == 'Fiber optic':
-            factors.append("- Servicio de fibra optica (mayor churn)")
-        if customer_data.get('OnlineSecurity') == 'No':
-            factors.append("- Sin seguridad online")
-        if customer_data.get('TechSupport') == 'No':
-            factors.append("- Sin soporte tecnico")
-        if customer_data.get('PaymentMethod') == 'Electronic check':
-            factors.append("- Pago con cheque electronico")
-
-        if factors:
-            return "**Factores de Riesgo:**\n" + "\n".join(factors)
-        return "No se identificaron factores de riesgo significativos."
-
-    def generate_retention_recommendation(self, customer_data: dict,
-                                          prediction: int,
-                                          probability: float) -> str:
-        """Genera recomendacion de retencion basada en prediccion."""
-        if prediction == 0:
+    # ------------------------------------------------------------------ #
+    def generate_recommendation(self, track: dict, prediction: str, probability: float) -> str:
+        """Genera recomendaciones de produccion/distribucion."""
+        if prediction == "High":
             return (
-                "El cliente tiene baja probabilidad de abandono.\n"
-                "Recomendacion: Mantener nivel de servicio actual."
+                "**Plan de impulso**\n\n"
+                "El track ya proyecta alta popularidad. Recomendaciones:\n"
+                "1. Priorizar lanzamiento en playlists editoriales y redes sociales.\n"
+                "2. Campana de streaming dirigida al genero y segmento del artista.\n"
+                "3. Monitorizar retencion a 7 dias para consolidar el alcance."
             )
 
-        recommendations = []
-
-        if customer_data.get('Contract') == 'Month-to-month':
-            recommendations.append(
-                "1. Ofrecer descuento por cambio a contrato anual"
-            )
-        if customer_data.get('OnlineSecurity') == 'No':
-            recommendations.append(
-                "2. Ofrecer seguridad online gratis por 3 meses"
-            )
-        if customer_data.get('TechSupport') == 'No':
-            recommendations.append(
-                "3. Incluir soporte tecnico premium como beneficio"
-            )
-        if customer_data.get('InternetService') == 'Fiber optic':
-            recommendations.append(
-                "4. Revisar precio de fibra optica - considerar ajuste"
-            )
-        if customer_data.get('tenure', 0) < 12:
-            recommendations.append(
-                "5. Programa de fidelizacion para nuevos clientes"
-            )
-
-        if not recommendations:
-            recommendations.append(
-                "1. Contactar al cliente para evaluacion personalizada"
-            )
+        recs = []
+        if track.get("danceability", 0) < 0.5:
+            recs.append("1. Incrementar bailabilidad (>=0.6) para mejorar difusion.")
+        if track.get("energy", 0) < 0.5:
+            recs.append("2. Subir el nivel de energia para mayor enganche.")
+        if track.get("artist_track_count", 99) <= 1:
+            recs.append("3. Aumentar frecuencia de lanzamiento para acumular exposicion del artista.")
+        if not track.get("explicit"):
+            pass
+        if track.get("instrumentalness", 0) > 0.5:
+            recs.append("4. Reducir instrumentalidad si se busca alcance masivo.")
+        if not recs:
+            recs.append("1. Evaluar posicionamiento en nichos del genero para construir traccion.")
 
         header = (
-            f"**Plan de Retencion** (Riesgo: {probability:.1%})\n\n"
+            f"**Plan de retencion/impulso** (Prediccion: {prediction}, "
+            f"confianza {float(np.atleast_1d(probability)[0]):.1%})\n\n"
             "Acciones recomendadas:\n"
         )
-        return header + "\n".join(recommendations)
+        return header + "\n".join(recs)
 
-    def analyze_cohort(self, customers_df: pd.DataFrame) -> dict:
-        """Analiza un grupo de clientes y retorna insights."""
-        if self.model is not None and 'Churn' not in customers_df.columns:
-            X = customers_df.copy()
-            if hasattr(self.model, 'predict_proba'):
-                probs = self.model.predict_proba(X)[:, 1]
-                predictions = self.model.predict(X)
-            else:
-                probs = np.zeros(len(X))
-                predictions = self.model.predict(X)
-
-            high_risk = int((probs > 0.7).sum())
-            medium_risk = int(((probs > 0.4) & (probs <= 0.7)).sum())
-            low_risk = int((probs <= 0.4).sum())
-        else:
-            high_risk = int((customers_df.get('Churn', 0) == 1).sum()) if 'Churn' in customers_df.columns else 0
-            medium_risk = 0
-            low_risk = len(customers_df) - high_risk
-
-        return {
-            'total_customers': len(customers_df),
-            'high_risk': high_risk,
-            'medium_risk': medium_risk,
-            'low_risk': low_risk,
-            'risk_percentage': high_risk / len(customers_df) * 100 if len(customers_df) > 0 else 0,
-        }
-
+    # ------------------------------------------------------------------ #
     def query(self, question: str) -> str:
-        """Responde preguntas sobre los datos de churn usando RAG."""
+        """Responde preguntas sobre el dataset usando RAG."""
         if self.rag_engine is None:
-            return "Motor RAG no inicializado. Cargue datos primero."
-
-        relevant_docs = self.rag_engine.retrieve(question, k=3)
-        stats = self.rag_engine.get_churn_stats()
-
-        context = "\n".join(relevant_docs[:3])
+            return "Motor RAG no inicializado. Cargue los datos primero."
+        docs = self.rag_engine.retrieve(question, k=4)
+        stats = self.rag_engine.get_popularity_stats()
+        context = "\n".join(f"- {d['text']}" for d in docs)
         response = (
-            f"**Respuesta basada en datos historicos:**\n\n"
+            "**Respuesta basada en datos historicos (RAG)**\n\n"
             f"Estadisticas generales:\n"
-            f"- Total clientes: {stats.get('total_clientes', 0)}\n"
-            f"- Churn rate: {stats.get('churn_rate', 0):.1%}\n"
-            f"- Antiguedad promedio (churn): {stats.get('avg_tenure_churn', 0):.1f} meses\n"
-            f"- Antiguedad promedio (sin churn): {stats.get('avg_tenure_no_churn', 0):.1f} meses\n"
-            f"- Cargo mensual promedio (churn): ${stats.get('avg_monthly_churn', 0):.2f}\n"
-            f"- Cargo mensual promedio (sin churn): ${stats.get('avg_monthly_no_churn', 0):.2f}\n\n"
-            f"Documentos relevantes encontrados: {len(relevant_docs)}"
+            f"- Total de tracks: {stats.get('total_tracks', 0):,}\n"
+            f"- Popularidad promedio: {stats.get('avg_popularity', 0):.1f}\n"
+            f"- % Alta / Media / Baja: "
+            f"{stats.get('pct_high', 0):.0%} / {stats.get('pct_medium', 0):.0%} / "
+            f"{stats.get('pct_low', 0):.0%}\n"
+            f"- Generos: {stats.get('n_genres', 0)}, Artistas: {stats.get('n_artists', 0):,}\n\n"
+            f"Documentos recuperados:\n{context}"
         )
         return response

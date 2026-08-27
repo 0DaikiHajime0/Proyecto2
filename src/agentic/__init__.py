@@ -1,4 +1,4 @@
-from .rag_engine import ChurnRAGEngine
-from .agent import ChurnAgent
+from .rag_engine import SpotifyRAGEngine
+from .agent import SpotifyPopularityAgent
 
-__all__ = ['ChurnRAGEngine', 'ChurnAgent']
+__all__ = ["SpotifyRAGEngine", "SpotifyPopularityAgent"]

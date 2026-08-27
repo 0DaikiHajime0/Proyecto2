@@ -1,78 +1,149 @@
 """
 Modulo de preprocesamiento de datos
 -----------------------------------
-Pipeline de transformacion para el dataset de Churn.
+Pipeline de transformacion para el dataset de Spotify Artist Streaming
+Analytics (2015-2025). Prepara los datos para un problema de clasificacion
+multiclase de la categoria de popularidad de los tracks.
 """
+from __future__ import annotations
+
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+# ---------------------------------------------------------------------------
+# Definicion del problema y del esquema de features
+# ---------------------------------------------------------------------------
+TARGET = "popularity_category"
+
+# Columnas que provocan fuga de informacion (leakage) y deben descartarse.
+# - `popularity` es la fuente de la que se deriva `popularity_category`.
+# - `stream_count` / `log_stream_count` son consecuencia de la popularidad.
+# - `upbeat_score` es una combinacion directa de `danceability` y `energy`.
+LEAKY_COLUMNS = [
+    "popularity",
+    "stream_count",
+    "log_stream_count",
+    "upbeat_score",
+    TARGET,
+]
+
+# Identificadores y texto libre de alta cardinalidad (no utiles como features).
+ID_COLUMNS = [
+    "track_id",
+    "track_name",
+    "artist_name",
+    "album_name",
+    "release_date",
+    "label",
+]
+
+NUMERIC_FEATURES = [
+    "duration_ms",
+    "danceability",
+    "energy",
+    "loudness",
+    "instrumentalness",
+    "tempo",
+    "release_year",
+    "release_month",
+    "release_quarter",
+    "explicit",
+    "artist_track_count",
+    "dance_energy",
+    "is_recent_release",
+    "artist_exposure",
+]
+
+CATEGORICAL_FEATURES = [
+    "genre",
+    "loudness_category",
+    "key_name",
+    "mode_name",
+    "release_day_of_week",
+    "is_weekend_release",
+]
+
+ALL_FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
 
+# ---------------------------------------------------------------------------
+# Funciones del pipeline
+# ---------------------------------------------------------------------------
 def load_data(path: str) -> pd.DataFrame:
-    """Carga el dataset desde un archivo CSV."""
+    """Carga el dataset de Spotify desde un archivo CSV."""
     return pd.read_csv(path)
 
 
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Limpia y preprocesa los datos."""
+    """Limpia el dataset y valida la variable objetivo.
+
+    El dataset sintetico no presenta valores nulos, pero se documenta y
+    defiende el manejo por si se reemplaza por datos reales.
+    """
     df = df.copy()
 
-    # Eliminar customerID
-    if 'customerID' in df.columns:
-        df = df.drop('customerID', axis=1)
+    # Validar que la columna objetivo exista
+    if TARGET not in df.columns:
+        raise ValueError(f"La columna objetivo '{TARGET}' no existe en el dataset.")
 
-    # Corregir TotalCharges
-    if 'TotalCharges' in df.columns:
-        df['TotalCharges'] = pd.to_numeric(df['TotalCharges'], errors='coerce')
-        df['TotalCharges'].fillna(df['TotalCharges'].median(), inplace=True)
+    # Asegurar tipos y eliminar duplicados por track_id
+    df = df.drop_duplicates(subset=["track_id"] if "track_id" in df.columns else None)
 
+    # Manejo defensivo de nulos en la columna objetivo
+    df = df[df[TARGET].notna()]
+
+    # Ordenar categorias para consistencia
+    df[TARGET] = pd.Categorical(
+        df[TARGET], categories=["Low", "Medium", "High"], ordered=True
+    )
     return df
 
 
-def encode_target(df: pd.DataFrame, target_col: str = 'Churn') -> pd.DataFrame:
-    """Codifica la variable objetivo."""
-    df = df.copy()
-    df[target_col] = df[target_col].map({'Yes': 1, 'No': 0})
-    return df
+def select_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Selecciona las columnas utiles eliminando IDs, texto y leakage."""
+    drop_cols = [c for c in (LEAKY_COLUMNS + ID_COLUMNS) if c in df.columns]
+    return df.drop(columns=drop_cols)
 
 
-def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
-    """Crea nuevas features derivadas."""
-    df = df.copy()
+def build_preprocessor() -> ColumnTransformer:
+    """Construye el preprocesador (scaling numerico + OHE categorico)."""
+    numeric_transformer = StandardScaler()
+    categorical_transformer = OneHotEncoder(handle_unknown="ignore")
 
-    # Promedio de cargo mensual por tenure
-    if 'MonthlyCharges' in df.columns and 'tenure' in df.columns:
-        df['avg_monthly_per_tenure'] = df['TotalCharges'] / (df['tenure'] + 1)
-
-    # Indicador de servicios multiples
-    service_cols = ['PhoneService', 'InternetService', 'OnlineSecurity',
-                    'OnlineBackup', 'DeviceProtection', 'TechSupport',
-                    'StreamingTV', 'StreamingMovies']
-    existing = [c for c in service_cols if c in df.columns]
-    if existing:
-        df['num_services'] = df[existing].apply(
-            lambda x: (x == 'Yes').sum(), axis=1
-        )
-
-    return df
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", numeric_transformer, NUMERIC_FEATURES),
+            ("cat", categorical_transformer, CATEGORICAL_FEATURES),
+        ],
+        remainder="drop",
+    )
+    return preprocessor
 
 
-def encode_categoricals(df: pd.DataFrame) -> pd.DataFrame:
-    """Aplica One-Hot Encoding a variables categoricas."""
-    cat_cols = df.select_dtypes(include='object').columns.tolist()
-    return pd.get_dummies(df, columns=cat_cols, drop_first=True)
+def get_feature_names(preprocessor: ColumnTransformer) -> list:
+    """Devuelve los nombres de las features despues del preprocesamiento."""
+    ohe = preprocessor.named_transformers_["cat"]
+    cat_features = list(ohe.get_feature_names_out(CATEGORICAL_FEATURES))
+    return NUMERIC_FEATURES + cat_features
 
 
-def scale_features(X_train: pd.DataFrame, X_test: pd.DataFrame,
-                   num_cols: list) -> tuple:
-    """Escala variables numericas con StandardScaler."""
-    scaler = StandardScaler()
-    cols_to_scale = [c for c in num_cols if c in X_train.columns]
+def split_data(
+    df: pd.DataFrame, test_size: float = 0.2, random_state: int = 42
+):
+    """Divide en train/test estratificado por la categoria de popularidad."""
+    X = df[ALL_FEATURES]
+    y = df[TARGET]
+    return train_test_split(
+        X, y, test_size=test_size, random_state=random_state, stratify=y
+    )
 
-    X_train_scaled = X_train.copy()
-    X_test_scaled = X_test.copy()
 
-    X_train_scaled[cols_to_scale] = scaler.fit_transform(X_train[cols_to_scale])
-    X_test_scaled[cols_to_scale] = scaler.transform(X_test[cols_to_scale])
-
-    return X_train_scaled, X_test_scaled, scaler
+def make_pipeline(model) -> Pipeline:
+    """Crea un Pipeline sklearn con preprocesador + modelo."""
+    return Pipeline(
+        steps=[("preprocessor", build_preprocessor()), ("classifier", model)]
+    )
