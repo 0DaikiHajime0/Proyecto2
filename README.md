@@ -365,11 +365,12 @@ y los runs se enviaran automaticamente al repositorio remoto de DagsHub.
 | Tarea | Descripcion | Estado |
 |-------|-------------|--------|
 | Dataset sintetico | El dataset provisto es sintetico; metricas cercanas a baseline son esperadas | Documentado |
-| DagsHub/MLflow | Tracking local configurado; soporte remoto via `.env` | Listo (local) |
-| Push a GitHub | `git push origin main --tags` | Pendiente (manual) |
-| Release v1.0.0 | Crear Release en GitHub con release notes | Listo (tag local) |
+| DagsHub/MLflow | Tracking local (sqlite) configurado; soporte remoto via `.env` | Listo (local) |
+| Estructura Git | Ramas `main` + `development`, merge `--no-ff` y tag `v1.0.0` | Listo (local) |
+| Push a GitHub | `git push origin main development --tags` | Pendiente (manual, bajo demanda) |
+| Pull Request | PR `development` -> `main` (merge realizado localmente) | Listo local / Pendiente en GitHub |
+| Release v1.0.0 | Crear Release en GitHub con release notes | Pendiente (manual, bajo demanda) |
 | Documentacion Git | Estrategia documentada en seccion 10 | Listo |
-| Pull Request | PR `development` -> `main` | Listo |
 
 ---
 
