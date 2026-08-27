@@ -178,9 +178,46 @@ identificadores/ texto de alta cardinalidad.
 - `reports/figures/confusion_matrix.png` - Matriz de confusion del mejor modelo
 - `reports/figures/feature_importance.png` - Importancia de features
 
+### Metricas Online (simuladas)
+El modelo no se sirve en produccion, por lo que la "evaluacion online" se simula
+reproduciendo un escenario de streaming: el conjunto de prueba se predice en lotes
+(`batch` de 1,000 tracks) y se calcula la macro-F1 acumulada a medida que llegan
+los datos. La macro-F1 online se estabiliza en **0.294**, coincidiendo con el valor
+offline (0.294), lo que indica estabilidad del modelo bajo una distribucion
+estacionaria (propia de datos sinteticos). Los detalles de la simulacion estan en
+`scripts/run_prediction.py` y el notebook `03-model-training.ipynb`.
+
+| Tipo | Modelo | Accuracy | F1-macro | ROC-AUC |
+|------|--------|----------|----------|---------|
+| Offline | Random Forest | 0.388 | 0.294 | 0.494 |
+| Online (streaming simulado) | Random Forest | 0.388 | 0.294 | n/a |
+
 ---
 
-## 6. Componente Agentic / RAG
+## 6. Conclusiones
+
+- **Pipeline end-to-end funcional**: se implemento un flujo completo de ML (preproceso,
+  ingenieria de features, entrenamiento, evaluacion, prediccion) reproducible via scripts
+  y notebooks, con registro de experimentos en MLflow.
+- **Componente GenAI (RAG)**: el agente explica predicciones, genera recomendaciones de
+  produccion y responde consultas en lenguaje natural usando una base de conocimiento
+  construida a partir del dataset (recuperacion TF-IDF, 100% offline).
+- **Limitacion central del dataset**: al ser totalmente sintetico y con variables
+  independientes, la popularidad no es predecible a partir de las features acusticas
+  (correlacion ~0; la unica correlacion alta es con `log_stream_count`, que es fuga y
+  fue descartada). Por ello todos los modelos convergen a la linea base de la clase
+  mayoritaria (ROC-AUC ~0.50). Esta es una propiedad del datos, documentada en
+  `DataSet Context .md`, y no un defecto del pipeline.
+- **Valor del proyecto**: demuestra buenas practicas de MLOps (modularidad, MLflow,
+  Git Flow con PR y Release, documentacion) que son el nucleo evaluado del curso. Con
+  un dataset real de Spotify el mismo pipeline capturaria la senal acustica real y
+  superaria la linea base.
+- **Buenas practicas de desarrollo**: ramas `main`/`development`, Pull Request #1
+  mergeado, Release `v1.0.0` y commits atomicos con convencion semantica.
+
+---
+
+## 7. Componente Agentic / RAG
 
 ### Descripcion
 El agente (`src/agentic/agent.py`) combina el modelo de ML con un motor RAG
@@ -215,7 +252,7 @@ response = agent.query('Cuales generos tienen mayor popularidad?')
 
 ---
 
-## 7. Estructura del Repositorio
+## 8. Estructura del Repositorio
 
 ```
 mle-project2-spotify-popularity/
@@ -261,7 +298,7 @@ mle-project2-spotify-popularity/
 
 ---
 
-## 8. Tecnologias
+## 9. Tecnologias
 
 | Categoria | Tecnologia |
 |-----------|------------|
@@ -276,7 +313,7 @@ mle-project2-spotify-popularity/
 
 ---
 
-## 9. Instalacion y Uso
+## 10. Instalacion y Uso
 
 ### Requisitos
 - Python 3.10+
@@ -323,7 +360,7 @@ y los runs se enviaran automaticamente al repositorio remoto de DagsHub.
 
 ---
 
-## 10. Estrategia de Git
+## 11. Estrategia de Git
 
 ### Ramas
 - **`main`**: Rama principal con codigo estable y releases.
@@ -338,7 +375,7 @@ y los runs se enviaran automaticamente al repositorio remoto de DagsHub.
 
 ---
 
-## 11. Estado Actual del Proyecto
+## 12. Estado Actual del Proyecto
 
 ### Pipeline ML completado
 - Dataset: 85,000 tracks de Spotify (sintetico).
@@ -360,7 +397,7 @@ y los runs se enviaran automaticamente al repositorio remoto de DagsHub.
 
 ---
 
-## 12. Pendiente / Notas para Entrega
+## 13. Pendiente / Notas para Entrega
 
 | Tarea | Descripcion | Estado |
 |-------|-------------|--------|
