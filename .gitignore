@@ -85,9 +85,10 @@ target/
 # Mypy cache
 .mypy_cache/
 
-# Data files (keep .gitkeep)
+# Data files (keep .gitkeep and the raw dataset so the repo is self-contained)
 /data/raw/*
 !/data/raw/.gitkeep
+!/data/raw/*.csv
 /data/interim/*
 !/data/interim/.gitkeep
 /data/processed/*
