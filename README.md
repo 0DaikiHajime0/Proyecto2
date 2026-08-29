@@ -334,3 +334,47 @@ Artefactos versionados por run: `MLmodel`, `conda.yaml`, `model.skops`,
 repositorio profesional, reproducible y con evidencia de MLflow; el modelo, aunque
 limitado por la naturaleza de los datos, demuestra el flujo completo de un proyecto
 de Machine Learning Engineering con componente online y agentico.
+
+---
+
+## Anexo: Instrucciones de ejecucion
+
+Requiere Python 3.10+ y las dependencias en `requirements.txt`:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Pipeline completo (paso a paso)
+
+```bash
+# 1. Preprocesamiento: genera data/processed/train.csv y test.csv
+python scripts/run_preprocessing.py
+
+# 2. Entrenamiento: entrena los 3 modelos y registra el mejor en MLflow/DagsHub
+#    REQUIERE variable DAGSHUB_TOKEN (o archivo .env)
+python scripts/run_training.py
+
+# 3. Prediccion: clasifica un track nuevo con el mejor modelo
+python scripts/run_prediction.py --input <ruta.csv> --output <resultado.csv>
+```
+
+### Via Makefile
+
+```bash
+make data      # carga datos
+make preprocess # preprocesamiento
+make train      # entrenamiento + trackeo MLflow
+make predict    # prediccion
+make test       # ejecuta pytest
+```
+
+### Explicabilidad y agente RAG
+
+- Notebook: `notebooks/04-agentic-rag.ipynb`.
+- Modulo reusable: `src/agentic/` (`agent.py`, `rag_engine.py`).
+
+### Evidencia MLflow
+
+- Experimentos: https://dagshub.com/0DaikiHajime0/Proyecto2.mlflow/#/experiments/0
+- Model Registry: https://dagshub.com/0DaikiHajime0/Proyecto2.mlflow/#/models
