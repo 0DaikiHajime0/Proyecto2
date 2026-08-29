@@ -105,9 +105,10 @@ target/
 !/models/.gitkeep
 !/models/best_model.pkl
 
-# Reports (keep .gitkeep)
+# Reports (keep .gitkeep and the generated figures as evidence)
 /reports/figures/*
 !/reports/figures/.gitkeep
+!/reports/figures/*.png
 
 # Environments
 .venv/

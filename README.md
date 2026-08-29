@@ -346,17 +346,29 @@ make predict
 ```
 
 ### MLflow
-Los experimentos se registran localmente en `mlflow.db` (backend sqlite). Para ver la UI:
+Los experimentos se registran en **DagsHub** (tracking remoto):
+
+- **Repo**: https://dagshub.com/0DaikiHajime0/Proyecto2
+- **Experimentos (runs + artefactos)**: https://dagshub.com/0DaikiHajime0/Proyecto2.mlflow/#/experiments/0
+- **Model Registry (modelo productivo)**: https://dagshub.com/0DaikiHajime0/Proyecto2.mlflow/#/models
+
+Cada run contiene **metricas**, **parametros** y el **artefacto del modelo**
+(export MLflow: `MLmodel`, `model.skops`, `conda.yaml`, etc.). El mejor modelo
+(Random Forest) esta registrado como `spotify_popularity_model` v1.
+
+De forma local (sin credenciales) los experimentos se escriben en `mlflow.db`
+(sqlite, `*.db` está ignorado pero `!mlflow.db` lo conserva). Para la UI local:
 ```bash
 mlflow ui --backend-store-uri sqlite:///mlflow.db
 ```
-Para usar **DagsHub** (tracking remoto) define las variables de entorno en `.env`:
+Para usar DagsHub define las variables en `.env` (ver `.env.example`):
 ```
-DAGSHUB_USER=<tu-usuario>
+DAGSHUB_USER=0DaikiHajime0
 DAGSHUB_TOKEN=<tu-token>
-DAGSHUB_REPO=mle-project2-spotify-popularity
+DAGSHUB_REPO=Proyecto2
 ```
-y los runs se enviaran automaticamente al repositorio remoto de DagsHub.
+y al ejecutar `python scripts/run_training.py` los runs se enviaran
+automaticamente a DagsHub.
 
 ---
 

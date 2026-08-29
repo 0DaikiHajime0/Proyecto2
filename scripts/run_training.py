@@ -12,12 +12,21 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_DIR))
 
+from dotenv import load_dotenv
+
+load_dotenv(PROJECT_DIR / ".env")
+
 import matplotlib
 
 matplotlib.use("Agg")
 
 from src.data.preprocess import ALL_FEATURES, get_feature_names, build_preprocessor
-from src.models.train_model import train_and_evaluate, log_to_mlflow, save_best_model
+from src.models.train_model import (
+    train_and_evaluate,
+    log_to_mlflow,
+    save_best_model,
+    register_model_version,
+)
 from src.models.evaluate import get_confusion_matrix
 from src.visualization import visualize as viz
 
@@ -46,12 +55,17 @@ def main():
             continue
         r = results[name]
         print(f"Registrando {name} en MLflow...")
-        log_to_mlflow(
+        run_id = log_to_mlflow(
             name,
             r["model"],
             params={"model_type": name, "features": len(ALL_FEATURES), "random_state": 42},
             metrics=r["metrics"],
         )
+        results[name]["mlflow_run_id"] = run_id
+
+    # Registrar el mejor modelo como productivo en el Model Registry
+    best_run_id = results[best_name]["mlflow_run_id"]
+    register_model_version(best_run_id, "spotify_popularity_model")
 
     # Guardar mejor modelo
     save_best_model(best["model"], best_name)

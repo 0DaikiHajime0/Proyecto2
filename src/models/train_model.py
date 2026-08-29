@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import pickle
+import tempfile
 import joblib
 from pathlib import Path
 
@@ -41,14 +42,17 @@ DAGSHUB_TOKEN = os.getenv("DAGSHUB_TOKEN")
 DAGSHUB_REPO = os.getenv("DAGSHUB_REPO", "mle-project2-spotify-popularity")
 
 if DAGSHUB_TOKEN and DAGSHUB_USER:
-    import dagshub
-
-    dagshub.init(repo_owner=DAGSHUB_USER, repo_name=DAGSHUB_REPO, token=DAGSHUB_TOKEN)
+    os.environ["DAGSHUB_USERNAME"] = DAGSHUB_USER
+    os.environ["DAGSHUB_TOKEN"] = DAGSHUB_TOKEN
+    os.environ["MLFLOW_TRACKING_USERNAME"] = DAGSHUB_USER
+    os.environ["MLFLOW_TRACKING_PASSWORD"] = DAGSHUB_TOKEN
     mlflow.set_tracking_uri(
         f"https://dagshub.com/{DAGSHUB_USER}/{DAGSHUB_REPO}.mlflow"
     )
+    print(f"[MLflow] Tracking remoto DagsHub: https://dagshub.com/{DAGSHUB_USER}/{DAGSHUB_REPO}")
 else:
     mlflow.set_tracking_uri(f"sqlite:///{PROJECT_DIR.as_posix()}/mlflow.db")
+    print("[MLflow] Tracking local: sqlite:///mlflow.db")
 
 EXPERIMENT_NAME = "spotify_popularity_classification"
 mlflow.set_experiment(EXPERIMENT_NAME)
@@ -158,7 +162,13 @@ def train_and_evaluate(X_train, y_train, X_test, y_test) -> dict:
 
 
 def log_to_mlflow(name: str, model, metrics: dict, params: dict):
-    """Registra un experimento en MLflow (metricas, parametros y artefactos)."""
+    """Registra un experimento en MLflow (metricas, parametros y artefactos).
+
+    El artefacto del modelo se sube exportandolo primero con
+    `mlflow.sklearn.save_model` y subiendo cada archivo con `log_artifact`
+    (plano, con reintentos), porque en DagsHub (mlflow>=3) `log_model` no
+    persiste artefactos y la subida de directorios puede fallar con 500.
+    """
     clean_metrics = {
         k: float(v)
         for k, v in metrics.items()
@@ -167,8 +177,48 @@ def log_to_mlflow(name: str, model, metrics: dict, params: dict):
     with mlflow.start_run(run_name=name) as run:
         mlflow.log_params(params)
         mlflow.log_metrics(clean_metrics)
-        mlflow.sklearn.log_model(model, "model")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            export_dir = Path(tmp_dir) / "model"
+            mlflow.sklearn.save_model(model, str(export_dir))
+            files = sorted(p for p in export_dir.rglob("*") if p.is_file())
+            for f in files:
+                _log_artifact_with_retry(str(f), artifact_path="model")
         return run.info.run_id
+
+
+def _log_artifact_with_retry(local_path: str, artifact_path: str, attempts: int = 3):
+    """Sube un artefacto a MLflow reintentando ante fallos transitorios."""
+    for attempt in range(1, attempts + 1):
+        try:
+            mlflow.log_artifact(local_path, artifact_path=artifact_path)
+            return
+        except Exception as exc:  # noqa: BLE001
+            if attempt == attempts:
+                raise
+            print(
+                f"[MLflow] Reintento {attempt}/{attempts} al subir "
+                f"{Path(local_path).name}: {exc}"
+            )
+
+
+def register_model_version(run_id: str, model_name: str) -> int:
+    """Registra el run del mejor modelo en el Model Registry como productivo.
+
+    En DagsHub el modelo registrado debe existir previamente, por lo que se
+    crea si no esta presente (DagsHub no lo auto-crea con `create_model_version`).
+    """
+    client = mlflow.tracking.MlflowClient()
+    try:
+        client.create_registered_model(model_name)
+    except Exception:  # ya existe
+        pass
+    model_uri = f"runs:/{run_id}/model"
+    version = client.create_model_version(model_name, model_uri, run_id=run_id)
+    print(
+        f"[MLflow] Modelo '{model_name}' v{version.version} registrado "
+        f"(run {run_id})"
+    )
+    return version.version
 
 
 def save_best_model(model, name: str):
