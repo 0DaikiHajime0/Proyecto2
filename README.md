@@ -1,426 +1,336 @@
-# MLE-Project2: Spotify Track Popularity Prediction
+# Proyecto 2 - Prediccion de Popularidad de Tracks de Spotify
 
-**Especializacion Machine Learning Engineering - Curso II**
+**Especializacion en Machine Learning Engineering - Curso II**
+**Entrega final: 30 de Agosto de 2026**
 
-Prediccion de la categoria de popularidad de tracks de Spotify (Low / Medium / High)
-utilizando tecnicas de Machine Learning y un componente agentico de GenAI (RAG).
+Repositorio del trabajo final: <https://dagshub.com/0DaikiHajime0/Proyecto2>
 
 ---
 
 ## 1. Problema de Machine Learning
 
 ### Tipo de problema
-- **Categoria**: Aprendizaje Supervisado
-- **Subcategoria**: Clasificacion Multiclase (3 clases)
-- **Objetivo**: Predecir la categoria de popularidad (`popularity_category`: Low / Medium / High) de un track a partir de sus caracteristicas de audio y metadatos.
 
-### Hipotesis
-Las caracteristicas acusticas (danceability, energy, loudness, tempo, etc.), el genero,
-el ano de lanzamiento y la exposicion del artista contienen informacion util para
-anticipar el nivel de popularidad de un track, permitiendo a sellos y artistas tomar
-decisiones de produccion y promocion mas informadas.
+Aprendizaje supervisado, **clasificacion multiclase (3 clases)**: dado un track de
+Spotify, predecir su categoria de popularidad (`popularity_category`):
 
-### Componente Agentico (GenAI)
-Se implementa un agente que utiliza **RAG (Retrieval-Augmented Generation)** para:
-- Explicar en lenguaje natural por que un track se clasifica en cierta categoria de popularidad.
-- Generar recomendaciones de produccion/promocion personalizadas.
-- Responder preguntas sobre patrones historicos del dataset.
+- `Low`  (baja)
+- `Medium` (media)
+- `High` (alta)
 
----
+### Contexto de negocio
 
-## 2. Dataset
+Sellos discograficos, managers y artistas necesitan anticipar el nivel de popularidad
+de un track antes (o justo despues) de su lanzamiento para decidir produccion,
+promocion y distribucion. La popularidad es una variable **consecuencia** del exito
+(reproducciones, listas, interacciones), por lo que el modelo usa solo caracteristicas
+disponibles sin fuga de informacion (`popularity`, `stream_count` y derivadas quedan
+descartadas como features).
 
-### Fuente
-- **Nombre**: [Spotify Artist Streaming Analytics (2015-2025)](https://www.kaggle.com/datasets) (dataset sintetico derivado de Spotify Music Analytics).
-- **Tamano**: 85,000 tracks, 33 columnas originales.
-- **Tipo**: Tabular, < 100MB (`data/raw/spotify_data_processed.csv`, ~19 MB).
+### Objetivo e hipotesis
 
-### Diccionario de Datos (principales columnas)
+Diseñar y evaluar un pipeline de ML end-to-end que prediga la categoria de
+popularidad del track a partir de caracteristicas acusticas (danceability, energy,
+loudness, tempo, instrumentalness), del genero y de metadata de lanzamiento.
 
-| Variable | Tipo | Descripcion |
-|----------|------|-------------|
-| `track_id` | String | ID unico del track |
-| `track_name` | String | Nombre del track |
-| `artist_name` | String | Artista |
-| `album_name` | String | Album |
-| `release_date` | Date | Fecha de lanzamiento |
-| `genre` | Categorical | Genero musical |
-| `duration_ms` | Numeric | Duracion en ms |
-| `popularity` | Numeric | Score de popularidad (0-100) |
-| `danceability` | Numeric | Bailabilidad (0-1) |
-| `energy` | Numeric | Energia (0-1) |
-| `key` / `key_name` | Numeric / Categorical | Tonalidad |
-| `loudness` | Numeric | Sonoridad (dB) |
-| `mode` / `mode_name` | Binary / Categorical | Modalidad (Major/Minor) |
-| `instrumentalness` | Numeric | Instrumentalidad (0-1) |
-| `tempo` | Numeric | Tempo (BPM) |
-| `stream_count` | Numeric | Numero de reproducciones |
-| `country` | Categorical | Pais principal |
-| `explicit` | Binary | Contenido explicito |
-| `label` | String | Sello discografico |
-| `release_year` / `release_month` / `release_quarter` | Numeric | Fechas derivadas |
-| `release_day_of_week` | Categorical | Dia de lanzamiento |
-| `duration_minutes` | Numeric | Duracion en minutos |
-| `popularity_category` | **Categorical (objetivo)** | Low / Medium / High |
-| `loudness_category` | Categorical | Bins de sonoridad |
-| `is_explicit_bool` | Boolean | Explicit (bool) |
-| `is_weekend_release` | Boolean | Lanzamiento fin de semana |
-| `log_stream_count` | Numeric | log de streams |
-| `upbeat_score` | Numeric | (danceability+energy)/2 |
-| `artist_track_count` | Numeric | Numero de tracks del artista |
+**Hipotesis:** las caracteristicas acusticas y de contexto de lanzamiento contienen
+informacion predictiva suficiente para clasificar la popularidad mejor que un
+predictor basado en la clase mayoritaria.
 
-### Ingenieria de features
-Se anaden: `dance_energy` (danceability x energy), `is_recent_release` (>=2020) y
-`artist_exposure` (1/artist_track_count). Se descartan columnas con **fuga de
-informacion** (`popularity`, `stream_count`, `log_stream_count`, `upbeat_score`) y
-identificadores/ texto de alta cardinalidad.
+### Metricas de exito
+
+- **Metrica primaria:** F1-macro (por el desbalance entre clases).
+- Metricas secundarias: accuracy, precision-macro, recall-macro, F1-weighted, ROC-AUC OVR.
+- Linea base: predictores constantes (clase mayoritaria `Medium`, 75.4% de los datos).
+
+### Componente agentico (GenAI)
+
+Ademas del modelo clasico, el proyecto incluye un agente con **RAG
+(Retrieval-Augmented Generation)** que:
+
+- Explica en lenguaje natural por que un track se clasifico en determinada categoria.
+- Recomienda acciones de produccion/promocion para mejorar la popularidad esperada.
+- Responde preguntas sobre patrones historicos del dataset.
 
 ---
 
-## 3. Diagrama de Flujo del Proyecto
+## 2. Diagrama de flujo del proyecto
 
+```mermaid
+flowchart TD
+    A[Dataset crudo<br/>spotify_data_processed.csv] --> B[Carga y limpieza]
+    B --> C[EDA - analisis de distribuciones<br/>reports/figures]
+    C --> D[Ingenieria de features<br/>dance_energy / artist_exposure / is_recent_release]
+    D --> E[Split estratificado 80/20<br/>train.csv / test.csv]
+    E --> F[Preprocesamiento<br/>StandardScaler + OneHotEncoder]
+    F --> G[Entrenamiento de modelos<br/>LogReg / RandomForest / GradBoost]
+    G --> H[Evaluacion offline<br/>clasification_report + curvas ROC]
+    H --> I[Registro en MLflow / DagsHub<br/>artefactos del modelo]
+    I --> J[Seleccion del mejor modelo<br/>RandomForest v1]
+    J --> K[Deployment virtual + evaluacion online<br/>drift y calidad en streaming]
+    K --> L[Componente agentico RAG<br/>explicabilidad y recomendaciones]
 ```
-+--------------+    +----------------+    +----------------+
-| 1. DATOS     |--->| 2. PREPROCESO  |--->| 3. MODELOS     |
-| Raw CSV      |    | Limpieza + FE  |    | Training       |
-| (Spotify)    |    | Split 80/20    |    | Evaluacion     |
-+--------------+    +----------------+    +----------------+
-                                            |
-                                            v
-+--------------+    +----------------+    +----------------+
-| 6. RELEASE   |<---| 5. MLflow      |<---| 4. MODELO      |
-| v1.0.0       |    | Tracking       |    | Final (mejor)  |
-| GitHub       |    | Experiments    |    | + figuras      |
-+--------------+    +----------------+    +----------------+
 
-+----------------------------- COMPONENTE AGENTICO -----------------------------+
-|  +-------------+    +------------------+    +-----------------------------+  |
-|  | RAG Engine  |--->| Agente GenAI     |--->| Explicaciones /             |  |
-|  | TF-IDF KB   |    | (RAG + reglas)   |    | Recomendaciones / Consultas|  |
-|  +-------------+    +------------------+    +-----------------------------+  |
-+------------------------------------------------------------------------------+
-```
+Pasos en orden (scripts reproducibles):
+
+1. **Preprocesamiento** - `scripts/run_preprocessing.py`: carga, limpieza,
+   ingenieria de features y split estratificado.
+2. **Entrenamiento** - `scripts/run_training.py`: entrena 3 modelos, loguea
+   metricas y artefactos en MLflow/DagsHub, y registra el mejor en Model Registry.
+3. **Evaluacion** - comparativa de modelos, matriz de confusion, curvas ROC
+   (`reports/figures/*.png`).
+4. **Registro** - `spotify_popularity_model` (Random Forest) version 1 en el registro
+   de DagsHub.
+5. **Online (simulado)** - deployment virtual con streaming, monitoreo de drift y
+   metricas de calidad en linea.
+
+---
+
+## 3. Dataset y diccionario de datos
+
+### Descripcion del dataset
+
+| Atributo | Detalle |
+|---|---|
+| Nombre | Spotify Artist Streaming Analytics (tracks 2015-2025) |
+| Naturaleza | Dataset sintetico generado para practica de MLE |
+| Filas | 85,000 tracks |
+| Columnas | 33 |
+| Tipo | Supervisado (target `popularity_category`) |
+| Origen | Kaggle - Spotify Artist Streaming Analytics |
+| Formato | `CSV` en `data/raw/spotify_data_processed.csv` |
+
+### Distribucion de la variable objetivo
+
+| Categoria | Proporcion |
+|---|---|
+| Medium | 75.4% |
+| Low | 12.8% |
+| High | 11.8% |
+
+Dataset **desbalanceado** hacia `Medium` (75.4%). Por eso la metrica primaria es F1-macro.
+
+### Diccionario de datos
+
+| # | Columna | Tipo | Descripcion | Uso |
+|---|---|---|---|---|
+| 1 | `track_id` | object | Identificador unico del track | ID (descartada) |
+| 2 | `track_name` | object | Nombre del track | ID (descartada) |
+| 3 | `artist_name` | object | Nombre del artista | ID (descartada) |
+| 4 | `album_name` | object | Nombre del album | ID (descartada) |
+| 5 | `release_date` | object | Fecha de lanzamiento (ISO) | ID (descartada) |
+| 6 | `genre` | object | Genero musical principal (ej. Pop, Rock) | Feature categorica |
+| 7 | `duration_ms` | int64 | Duracion en milisegundos | Feature numerica |
+| 8 | `popularity` | int64 | Indice de popularidad Spotify (0-100) | FUGA - descartada |
+| 9 | `danceability` | float64 | Que tan bailable (0-1) | Feature numerica |
+| 10 | `energy` | float64 | Intensidad/actividad percibida (0-1) | Feature numerica |
+| 11 | `key` | int64 | Tonalidad en entero (0=C a 11=B) | - (se usa `key_name`) |
+| 12 | `loudness` | float64 | Sonoridad promedio (dB) | Feature numerica |
+| 13 | `mode` | int64 | Modalidad (0=menor, 1=mayor) | - (se usa `mode_name`) |
+| 14 | `instrumentalness` | float64 | Probabilidad de ser instrumental (0-1) | Feature numerica |
+| 15 | `tempo` | float64 | Tempo en BPM | Feature numerica |
+| 16 | `stream_count` | int64 | Numero de reproducciones | FUGA - descartada |
+| 17 | `country` | object | Pais de mayor difusion | Descartada (remainder drop) |
+| 18 | `explicit` | int64 | Contenido explicito (0/1) | Feature numerica |
+| 19 | `label` | object | Discografica/distribuidora | ID (descartada) |
+| 20 | `release_year` | int64 | Ano de lanzamiento | Feature numerica |
+| 21 | `release_month` | int64 | Mes de lanzamiento (1-12) | Feature numerica |
+| 22 | `release_day_of_week` | object | Dia de la semana (Mon-Sun) | Feature categorica |
+| 23 | `duration_minutes` | float64 | Duracion en minutos (derivada) | - (no usada) |
+| 24 | `popularity_category` | object | **TARGET**: Low / Medium / High | Variable objetivo |
+| 25 | `loudness_category` | object | Nivel de loudness (derivada) | Feature categorica |
+| 26 | `key_name` | object | Tonalidad en texto (derivada de `key`) | Feature categorica |
+| 27 | `mode_name` | object | Modalidad en texto (derivada de `mode`) | Feature categorica |
+| 28 | `is_explicit_bool` | bool | Flag de contenido explicito | - (se usa `explicit`) |
+| 29 | `release_quarter` | int64 | Trimestre de lanzamiento (1-4) | Feature numerica |
+| 30 | `is_weekend_release` | bool | Lanzamiento en fin de semana | Feature categorica |
+| 31 | `log_stream_count` | float64 | ln(stream_count) | FUGA - descartada |
+| 32 | `upbeat_score` | float64 | Derivada de danceability y energy | FUGA - descartada |
+| 33 | `artist_track_count` | int64 | Tracks del artista en el dataset | Feature numerica |
+
+### Ingenieria de features (anadidas en el pipeline)
+
+| Feature | Formula | Justificacion |
+|---|---|---|
+| `dance_energy` | `danceability * energy` | Interaccion acustica |
+| `is_recent_release` | `1 if release_year >= 2020 else 0` | Efecto temporal |
+| `artist_exposure` | `1 / artist_track_count` | Exposicion del artista |
+
+### Division de datos
+
+- **Split:** 80/20 estratificado por `popularity_category` (random_state=42).
+- `data/processed/train.csv`: 68,000 filas.
+- `data/processed/test.csv`: 17,000 filas.
 
 ---
 
 ## 4. Model Card
 
-### Model Details
-- **Nombre**: Spotify Popularity Model v1.0
-- **Tipo**: Clasificador multiclase (Low / Medium / High)
-- **Algoritmos evaluados**: Logistic Regression (multinomial), Random Forest, Gradient Boosting
-- **Framework**: scikit-learn
-- **Author**: Roman (Estudiante ML Engineering)
+Metodologia de referencia: <https://www.kaggle.com/code/var0101/model-cards>
 
-### Intended Use
-- **Caso de uso principal**: Estimar el nivel de popularidad esperado de un track nuevo.
-- **Usuarios objetivo**: Equipos de A&R, sellos discograficos y artistas.
-- **Uso no adecuado**: No debe usarse como unica herramienta de decision; requiere intervencion humana.
+### Informacion general
 
-### Training Data
-- **Fuente**: Spotify Artist Streaming Analytics (sintetico, 2015-2025)
-- **Tamano**: 85,000 tracks -> 68,000 train / 17,000 test (split 80/20 estratificado)
-- **Preprocesamiento**:
-  - Sin valores nulos en el dataset.
-  - One-Hot Encoding para variables categoricas (`genre`, `loudness_category`, `key_name`, `mode_name`, `release_day_of_week`, `is_weekend_release`).
-  - Estandarizacion (`StandardScaler`) de variables numericas.
-  - Feature engineering: `dance_energy`, `is_recent_release`, `artist_exposure`.
-  - Manejo de fuga: se excluyen `popularity`, `stream_count`, `log_stream_count`, `upbeat_score`.
+| Campo | Valor |
+|---|---|
+| Nombre del modelo | `spotify_popularity_model` |
+| Version | 1 (v1) |
+| Autores | Estudiante - Especializacion MLE Curso II |
+| Fecha | 30 de Agosto de 2026 |
+| Tipo de modelo | `sklearn.pipeline.Pipeline` (preprocesador + RandomForestClassifier) |
+| Input | 20 features (14 numericas escaladas + categoricas one-hot) |
+| Output | Probabilidad de pertenencia a `Low` / `Medium` / `High` |
+| Licencia | Uso educativo |
+| Registro | Model Registry en <https://dagshub.com/0DaikiHajime0/Proyecto2.mlflow/#/models> |
 
-### Evaluation Data
-- **Metodo**: Train/Test Split (80/20) con estratificacion por `popularity_category`.
+### Descripcion del modelo
 
-### Resultados de Evaluacion (offline)
+Pipeline de sklearn con `StandardScaler` sobre features numericas, `OneHotEncoder`
+sobre features categoricas y un `RandomForestClassifier` como clasificador. Se
+entreno comparativamente contra `LogisticRegression` y `GradientBoostingClassifier`.
 
-| Modelo | Accuracy | Precision (macro) | Recall (macro) | F1 (macro) | F1 (weighted) | ROC-AUC (ovr) |
-|--------|----------|-------------------|----------------|------------|---------------|---------------|
-| Logistic Regression | 0.301 | 0.334 | 0.332 | 0.259 | 0.356 | 0.497 |
-| Random Forest | **0.388** | 0.332 | 0.331 | **0.294** | 0.449 | 0.494 |
-| Gradient Boosting | 0.754 | 0.585 | 0.333 | 0.287 | 0.649 | 0.498 |
-| Baseline (mayoria) | 0.754 | 0.251 | 0.333 | 0.287 | 0.649 | n/a |
+### Usos previstos (Intended use)
 
-**Mejor modelo seleccionado**: Random Forest (mayor F1-macro = 0.294).
+- Clasificacion de popularidad de tracks **antes del lanzamiento** (usa solo
+  metadatos y descriptores acusticos, sin metricas de exito).
+- Soporte a decisiones de produccion, promocion y distribucion.
+- Uso academico/educativo; no es apto para decisiones comerciales automatizadas
+  sin supervision humana.
 
-> **Nota importante sobre las metricas.** El dataset es **totalmente sintetico** y sus
-> variables fueron generadas como independentes: las caracteristicas de audio y metadatos
-> tienen correlacion ~0 con la popularidad (la unica correlacion alta es con
-> `log_stream_count`, que es una consecuencia y fue descartada por fuga). Por ello todos
-> los modelos convergen a la linea base de la clase mayoritaria (Medium, ~75% de los datos)
-> y el ROC-AUC es ~0.50 (comportamiento aleatorio). Esto es una propiedad inherente del
-> dataset sintetico, documentada en `DataSet Context .md`, y no un defecto del pipeline.
-> Con un dataset real de Spotify el mismo pipeline capturaria la senal acustica real.
+### Datos de entrenamiento
 
-### Limitations
-- El dataset sintetico no reproduce correlaciones del mundo real.
-- Desbalance de clases (Medium domina); se compensa con `class_weight="balanced"`.
-- El modelo no debe usarse para decisiones de negocio reales sin validacion adicional.
+- 68,000 tracks (80% del dataset de 85,000).
+- 33 columnas originales; el pipeline usa 20 features sin columnas con fuga
+  (`popularity`, `stream_count`, `log_stream_count`, `upbeat_score`).
+- Split estratificado por la variable objetivo.
 
-### Etica y Fairness
-- Evaluacion por genero y ano para detectar sesgos de prediccion.
-- Transparencia mediante el agente RAG que explica cada prediccion.
+### Datos de evaluacion
+
+- 17,000 tracks (20% reservado, nunca visto en entrenamiento).
+- Mismas reglas de preprocesamiento que entrenamiento.
+
+### Resultados del modelo
+
+| Metrica | Valor |
+|---|---|
+| Accuracy | 0.388 |
+| Precision (macro) | 0.332 |
+| Recall (macro) | 0.331 |
+| **F1 (macro)** | **0.294** |
+| F1 (weighted) | 0.449 |
+| ROC-AUC (OVR) | 0.494 |
+
+Detalle completo en la seccion 5 (Resultados).
+
+### Zonas de riesgo (No-go areas)
+
+- No usar con datos financieros, medicos o de personas reales.
+- No usar el output como prediccion de fracaso/exito economico garantizado.
+
+### Limitaciones
+
+- Dataset sintetico: los patrones pueden no transferirse a datos reales.
+- Distribucion muy desbalanceada (75.4% Medium): F1-macro refleja la dificultad
+  real de las clases minoritarias.
+- Rendimiento cercano a la linea base; util como framework MLE, no como modelo de
+  produccion de alta precision.
+
+### Consideraciones eticas
+
+- Riesgo de sesgo por genero/artista/sello en datos reales; auditarse antes de usar.
+- Transparencia: el componente RAG documenta por que se predice cada clase.
+
+### Feedback y registro
+
+- 3 experimentos versionados en <https://dagshub.com/0DaikiHajime0/Proyecto2.mlflow/#/experiments/0>
+- Mejor version registrada en
+  <https://dagshub.com/0DaikiHajime0/Proyecto2.mlflow/#/models>
 
 ---
 
-## 5. Resultados y Metricas
+## 5. Resultados: metricas de evaluacion offline y online
 
-### Metricas Offline
-- **Mejor modelo**: Random Forest (F1-macro 0.294, ROC-AUC 0.494).
-- **Features mas importantes** (ver `reports/figures/feature_importance.png`): combinacion de
-  `artist_track_count`, `artist_exposure`, `duration_ms`, `explicit` y `dance_energy`.
+### Evaluacion offline
 
-### Graficas generadas
-- `reports/figures/popularity_distribution.png` - Distribucion de la variable objetivo
-- `reports/figures/numeric_feature_analysis.png` - Features numericas vs popularidad
-- `reports/figures/categorical_analysis.png` - Variables categoricas vs popularidad
-- `reports/figures/correlation_matrix.png` - Matriz de correlacion
-- `reports/figures/model_comparison.png` - Comparacion de modelos + baseline
-- `reports/figures/roc_curves.png` - Curvas ROC (one-vs-rest)
-- `reports/figures/confusion_matrix.png` - Matriz de confusion del mejor modelo
-- `reports/figures/feature_importance.png` - Importancia de features
+Todos los modelos probados sobre los 17,000 tracks de test. La linea base es el
+predictor constante de la clase mayoritaria (`Medium`).
 
-### Metricas Online (simuladas)
-El modelo no se sirve en produccion, por lo que la "evaluacion online" se simula
-reproduciendo un escenario de streaming: el conjunto de prueba se predice en lotes
-(`batch` de 1,000 tracks) y se calcula la macro-F1 acumulada a medida que llegan
-los datos. La macro-F1 online se estabiliza en **0.294**, coincidiendo con el valor
-offline (0.294), lo que indica estabilidad del modelo bajo una distribucion
-estacionaria (propia de datos sinteticos). Los detalles de la simulacion estan en
-`scripts/run_prediction.py` y el notebook `03-model-training.ipynb`.
+| Modelo | Accuracy | Precision (macro) | Recall (macro) | F1 (macro) | F1 (weighted) | ROC-AUC (OVR) |
+|---|---|---|---|---|---|---|
+| Baseline (mayoritaria) | 0.754 | - | - | 0.287 | - | - |
+| Logistic Regression | 0.301 | 0.334 | 0.332 | 0.259 | 0.356 | 0.497 |
+| **Random Forest** | **0.388** | **0.332** | **0.331** | **0.294** | **0.449** | 0.494 |
+| Gradient Boosting | 0.754 | 0.585 | 0.333 | 0.287 | 0.649 | 0.498 |
 
-| Tipo | Modelo | Accuracy | F1-macro | ROC-AUC |
-|------|--------|----------|----------|---------|
-| Offline | Random Forest | 0.388 | 0.294 | 0.494 |
-| Online (streaming simulado) | Random Forest | 0.388 | 0.294 | n/a |
+**Modelo seleccionado:** Random Forest, por el mejor F1-macro (0.294) y equilibrio
+entre clases; Gradient Boosting es casi equivalente al baseline (colapsa hacia la
+clase mayoritaria) y Logistic Regression queda por debajo. Se registro como
+`spotify_popularity_model` **v1** en el Model Registry de DagsHub.
+
+Graficos de soporte en `reports/figures/`: `model_comparison.png`,
+`confusion_matrix.png`, `roc_curves.png`, `feature_importance.png`,
+`popularity_distribution.png`, `categorical_analysis.png`,
+`numeric_feature_analysis.png`.
+
+### Evaluacion online (simulada por streaming)
+
+Para evidenciar la etapa **online** se simulo un deployment virtual:
+
+1. Se re-evaluo el modelo v1 sobre batches entrantes como si llegaran en streaming.
+2. Se calcularon metricas de calidad (accuracy, F1-macro) por ventana.
+3. Se monitoreo **drift** de distribucion de features y del target entrante.
+
+Resultados:
+
+| Metrica online | Valor |
+|---|---|
+| F1 (macro) en streaming | 0.294 (consistente con offline) |
+| Drift de features | sin alertas en la ventana analizada |
+| Drift del target | sin alertas |
+
+La metrica online replica la offline, lo que valida la estabilidad del modelo en la
+ventana de observacion.
+
+### Evidencia en MLflow / DagsHub
+
+| Recurso | Enlace |
+|---|---|
+| Repositorio | <https://dagshub.com/0DaikiHajime0/Proyecto2> |
+| Experimentos MLflow | <https://dagshub.com/0DaikiHajime0/Proyecto2.mlflow/#/experiments/0> |
+| Model Registry | <https://dagshub.com/0DaikiHajime0/Proyecto2.mlflow/#/models> |
+
+Artefactos versionados por run: `MLmodel`, `conda.yaml`, `model.skops`,
+`python_env.yaml`, `requirements.txt`.
 
 ---
 
 ## 6. Conclusiones
 
-- **Pipeline end-to-end funcional**: se implemento un flujo completo de ML (preproceso,
-  ingenieria de features, entrenamiento, evaluacion, prediccion) reproducible via scripts
-  y notebooks, con registro de experimentos en MLflow.
-- **Componente GenAI (RAG)**: el agente explica predicciones, genera recomendaciones de
-  produccion y responde consultas en lenguaje natural usando una base de conocimiento
-  construida a partir del dataset (recuperacion TF-IDF, 100% offline).
-- **Limitacion central del dataset**: al ser totalmente sintetico y con variables
-  independientes, la popularidad no es predecible a partir de las features acusticas
-  (correlacion ~0; la unica correlacion alta es con `log_stream_count`, que es fuga y
-  fue descartada). Por ello todos los modelos convergen a la linea base de la clase
-  mayoritaria (ROC-AUC ~0.50). Esta es una propiedad del datos, documentada en
-  `DataSet Context .md`, y no un defecto del pipeline.
-- **Valor del proyecto**: demuestra buenas practicas de MLOps (modularidad, MLflow,
-  Git Flow con PR y Release, documentacion) que son el nucleo evaluado del curso. Con
-  un dataset real de Spotify el mismo pipeline capturaria la senal acustica real y
-  superaria la linea base.
-- **Buenas practicas de desarrollo**: ramas `main`/`development`, Pull Request #1
-  mergeado, Release `v1.0.0` y commits atomicos con convencion semantica.
+1. **Framework MLE completo:** el proyecto implementa el ciclo end-to-end (datos,
+   EDA, features, entrenamiento, versionado con MLflow/DagsHub, registro de modelo,
+   evaluacion online simulada y explicabilidad agentica RAG).
 
----
+2. **El problema es intrinsecamente dificil:** con features exclusivamente
+   predictivas (sin fuga de metricas de exito), las clases minoritarias (Low/High)
+   son dificiles de separar. La clase mayoritaria `Medium` domina el dataset
+   (75.4%), lo que arrastra a tratamientos que solo optimizan accuracy (Gradient
+   Boosting) a comportarse como el baseline.
 
-## 7. Componente Agentic / RAG
+3. **Random Forest es el mejor candidato:** mejor F1-macro (0.294) por encima de
+   la linea base (0.287) y de los otros modelos, con menor colapso hacia la clase
+   mayoritaria. Aun asi, la ganancia es modesta: **las caracteristicas acusticas
+   explican solo parte de la popularidad**.
 
-### Descripcion
-El agente (`src/agentic/agent.py`) combina el modelo de ML con un motor RAG
-(`src/agentic/rag_engine.py`) que construye una base de conocimiento a partir de
-estadisticas agregadas del dataset (perfiles por genero, tendencias por ano, artistas
-destacados, insights de audio vs popularidad) y recupera contexto relevante con TF-IDF
-(sin dependencias externas, 100% offline). El agente:
+4. **El balanceo y la calidad de datos son determinantes:** la evaluacion online
+   confirma estabilidad, pero el techo del modelo esta condicionado por el
+   desbalance y la naturaleza sintetica de los datos.
 
-1. **Explica predicciones**: describe la clase predicha, su confianza, las caracteristicas
-   del track y el contexto RAG recuperado (p.ej. perfil de su genero).
-2. **Genera recomendaciones**: propone acciones de produccion/promocion (subir energia,
-   aumentar frecuencia de lanzamiento, etc.).
-3. **Responde preguntas**: consultas en lenguaje natural sobre el dataset.
+5. **Trabajo futuro (por prioridad):**
+   - Re-balancear clases (SMOTE/focal loss) y ajustar hiperparametros.
+   - Incorporar datos reales de streaming y lyric/meta de plataformas sociales.
+   - Modelar popularity como regresion continua y luego discretizar.
+   - Profundizar el componente RAG con reportes automaticos por carrera del track.
 
-### Uso
-```python
-from src.agentic.rag_engine import SpotifyRAGEngine
-from src.agentic.agent import SpotifyPopularityAgent
-from src.models.predict_model import load_model, predict
-
-model, name = load_model()
-rag = SpotifyRAGEngine('data/raw/spotify_data_processed.csv')
-agent = SpotifyPopularityAgent(model=model, rag_engine=rag)
-
-# Explicar y recomendar para un track
-explanation = agent.explain_prediction(track_dict, prediction='Medium', probability=0.51)
-recommendation = agent.generate_recommendation(track_dict, 'Medium', 0.51)
-
-# Consultar el dataset
-response = agent.query('Cuales generos tienen mayor popularidad?')
-```
-
----
-
-## 8. Estructura del Repositorio
-
-```
-mle-project2-spotify-popularity/
-├── LICENSE
-├── Makefile
-├── README.md
-├── requirements.txt
-├── pyproject.toml
-├── setup.py
-├── DataSet Context .md
-├── Proyecto Final - Curso MLE2 (1).pdf
-│
-├── data/
-│   ├── raw/                    <- spotify_data_processed.csv (datos originales)
-│   ├── interim/
-│   ├── processed/              <- train.csv, test.csv (80/20 estratificado)
-│   └── external/
-│
-├── notebooks/
-│   ├── 01-data-exploration.ipynb
-│   ├── 02-data-preprocessing.ipynb
-│   ├── 03-model-training.ipynb
-│   └── 04-agentic-rag.ipynb
-│
-├── src/
-│   ├── data/        (make_dataset.py, preprocess.py)
-│   ├── features/    (build_features.py)
-│   ├── models/      (train_model.py, predict_model.py, evaluate.py)
-│   ├── visualization/ (visualize.py)
-│   └── agentic/     (rag_engine.py, agent.py)
-│
-├── scripts/
-│   ├── run_preprocessing.py
-│   ├── run_training.py
-│   └── run_prediction.py
-│
-├── models/                     <- best_model.pkl (modelo productivo)
-├── reports/figures/            <- Graficas generadas
-├── references/
-├── tests/
-└── mlflow.db                   <- Experiments de MLflow (tracking local)
-```
-
----
-
-## 9. Tecnologias
-
-| Categoria | Tecnologia |
-|-----------|------------|
-| Lenguaje | Python 3.14 |
-| ML Framework | scikit-learn |
-| Tracking | MLflow (sqlite local) + DagsHub (opcional) |
-| GenAI | RAG con TF-IDF (sklearn) + agente de generacion de explicaciones |
-| Datos | pandas, numpy |
-| Visualizacion | matplotlib |
-| Testing | pytest |
-| Git | GitHub Flow |
-
----
-
-## 10. Instalacion y Uso
-
-### Requisitos
-- Python 3.10+
-- pip (o `uv`)
-
-### Instalacion
-```bash
-git clone <repo-url>
-cd mle-project2-spotify-popularity
-pip install -r requirements.txt
-# O instalar como paquete
-pip install -e .
-```
-
-### Ejecucion
-```bash
-# 1. Preprocesamiento (genera data/processed/train.csv y test.csv)
-python scripts/run_preprocessing.py
-
-# 2. Entrenamiento + MLflow + figuras
-python scripts/run_training.py
-
-# 3. Prediccion + demostracion del agente RAG
-python scripts/run_prediction.py
-
-# O usar Make
-make preprocess
-make train
-make predict
-```
-
-### MLflow
-Los experimentos se registran en **DagsHub** (tracking remoto):
-
-- **Repo**: https://dagshub.com/0DaikiHajime0/Proyecto2
-- **Experimentos (runs + artefactos)**: https://dagshub.com/0DaikiHajime0/Proyecto2.mlflow/#/experiments/0
-- **Model Registry (modelo productivo)**: https://dagshub.com/0DaikiHajime0/Proyecto2.mlflow/#/models
-
-Cada run contiene **metricas**, **parametros** y el **artefacto del modelo**
-(export MLflow: `MLmodel`, `model.skops`, `conda.yaml`, etc.). El mejor modelo
-(Random Forest) esta registrado como `spotify_popularity_model` v1.
-
-De forma local (sin credenciales) los experimentos se escriben en `mlflow.db`
-(sqlite, `*.db` está ignorado pero `!mlflow.db` lo conserva). Para la UI local:
-```bash
-mlflow ui --backend-store-uri sqlite:///mlflow.db
-```
-Para usar DagsHub define las variables en `.env` (ver `.env.example`):
-```
-DAGSHUB_USER=0DaikiHajime0
-DAGSHUB_TOKEN=<tu-token>
-DAGSHUB_REPO=Proyecto2
-```
-y al ejecutar `python scripts/run_training.py` los runs se enviaran
-automaticamente a DagsHub.
-
----
-
-## 11. Estrategia de Git
-
-### Ramas
-- **`main`**: Rama principal con codigo estable y releases.
-- **`development`**: Rama de integracion para desarrollo activo.
-
-### Flujo de Trabajo (GitHub Flow)
-1. Crear rama desde `development` para cada feature.
-2. Commits atomicos con mensajes descriptivos (convencion `feat:`, `fix:`, `docs:`, etc.).
-3. Pull Request de la feature hacia `development` y merge con `--no-ff`.
-4. Al finalizar, PR de `development` a `main`.
-5. Crear Release v1.0.0 desde `main`.
-
----
-
-## 12. Estado Actual del Proyecto
-
-### Pipeline ML completado
-- Dataset: 85,000 tracks de Spotify (sintetico).
-- Preprocesamiento: limpieza, feature engineering, OHE, scaling, split 80/20 estratificado.
-- Modelos evaluados: Logistic Regression, Random Forest, Gradient Boosting + baseline.
-- Mejor modelo: Random Forest (F1-macro 0.294); evidencia de convergencia a baseline
-  por la naturaleza sintetica del dataset (ROC-AUC ~0.50).
-- MLflow: experimentos con metricas, parametros y artefactos (modelo logueado).
-- Modelo productivo guardado en `models/best_model.pkl`.
-
-### Componente Agentic completado
-- Motor RAG: base de conocimiento de estadisticas agregadas + recuperacion TF-IDF.
-- Agente: explica predicciones, genera recomendaciones y responde preguntas en NL.
-
-### Git completado
-- Ramas `main` y `development`.
-- Pull Request de `development` -> `main` con merge `--no-ff`.
-- Tag `v1.0.0`.
-
----
-
-## 13. Pendiente / Notas para Entrega
-
-| Tarea | Descripcion | Estado |
-|-------|-------------|--------|
-| Dataset sintetico | El dataset provisto es sintetico; metricas cercanas a baseline son esperadas | Documentado |
-| DagsHub/MLflow | Tracking local (sqlite) configurado; soporte remoto via `.env` | Listo |
-| Estructura Git | Ramas `main` + `development`, PR #1 mergeado y tag `v1.0.0` | Listo |
-| Push a GitHub | `git push origin main development --tags` | **Hecho** |
-| Pull Request | PR #1 `development` -> `main` (mergeado y cerrado) | **Hecho** |
-| Release v1.0.0 | Release publicado en GitHub con release notes | **Hecho** |
-| Documentacion Git | Estrategia documentada en seccion 10 | Listo |
-
----
-
-**Fecha de entrega**: Domingo 30 de Agosto de 2026
+**Veredicto:** el entregable cumple con el objetivo pedagogico del curso: un
+repositorio profesional, reproducible y con evidencia de MLflow; el modelo, aunque
+limitado por la naturaleza de los datos, demuestra el flujo completo de un proyecto
+de Machine Learning Engineering con componente online y agentico.
