@@ -266,10 +266,28 @@ entre clases; Gradient Boosting es casi equivalente al baseline (colapsa hacia l
 clase mayoritaria) y Logistic Regression queda por debajo. Se registro como
 `spotify_popularity_model` **v1** en el Model Registry de DagsHub.
 
-Graficos de soporte en `reports/figures/`: `model_comparison.png`,
-`confusion_matrix.png`, `roc_curves.png`, `feature_importance.png`,
-`popularity_distribution.png`, `categorical_analysis.png`,
-`numeric_feature_analysis.png`.
+#### Reportes y figuras (para revisar por el docente)
+
+Figuras generadas en la evaluacion (`reports/figures/`):
+
+| Reporte | GitHub | DagsHub |
+|---|---|---|
+| Comparativa de modelos | [GitHub](https://github.com/0DaikiHajime0/Proyecto2/blob/main/reports/figures/model_comparison.png) | [DagsHub](https://dagshub.com/0DaikiHajime0/Proyecto2/src/main/reports/figures/model_comparison.png) |
+| Matriz de confusion | [GitHub](https://github.com/0DaikiHajime0/Proyecto2/blob/main/reports/figures/confusion_matrix.png) | [DagsHub](https://dagshub.com/0DaikiHajime0/Proyecto2/src/main/reports/figures/confusion_matrix.png) |
+| Curvas ROC | [GitHub](https://github.com/0DaikiHajime0/Proyecto2/blob/main/reports/figures/roc_curves.png) | [DagsHub](https://dagshub.com/0DaikiHajime0/Proyecto2/src/main/reports/figures/roc_curves.png) |
+| Importancia de features | [GitHub](https://github.com/0DaikiHajime0/Proyecto2/blob/main/reports/figures/feature_importance.png) | [DagsHub](https://dagshub.com/0DaikiHajime0/Proyecto2/src/main/reports/figures/feature_importance.png) |
+| Distribucion de popularidad | [GitHub](https://github.com/0DaikiHajime0/Proyecto2/blob/main/reports/figures/popularity_distribution.png) | [DagsHub](https://dagshub.com/0DaikiHajime0/Proyecto2/src/main/reports/figures/popularity_distribution.png) |
+| Analisis categorico | [GitHub](https://github.com/0DaikiHajime0/Proyecto2/blob/main/reports/figures/categorical_analysis.png) | [DagsHub](https://dagshub.com/0DaikiHajime0/Proyecto2/src/main/reports/figures/categorical_analysis.png) |
+| Analisis de features numericas | [GitHub](https://github.com/0DaikiHajime0/Proyecto2/blob/main/reports/figures/numeric_feature_analysis.png) | [DagsHub](https://dagshub.com/0DaikiHajime0/Proyecto2/src/main/reports/figures/numeric_feature_analysis.png) |
+
+Notebooks del proyecto (`notebooks/`):
+
+| Notebook | GitHub | DagsHub |
+|---|---|---|
+| 01 - Exploracion de datos | [GitHub](https://github.com/0DaikiHajime0/Proyecto2/blob/main/notebooks/01-data-exploration.ipynb) | [DagsHub](https://dagshub.com/0DaikiHajime0/Proyecto2/src/main/notebooks/01-data-exploration.ipynb) |
+| 02 - Preprocesamiento de datos | [GitHub](https://github.com/0DaikiHajime0/Proyecto2/blob/main/notebooks/02-data-preprocessing.ipynb) | [DagsHub](https://dagshub.com/0DaikiHajime0/Proyecto2/src/main/notebooks/02-data-preprocessing.ipynb) |
+| 03 - Entrenamiento de modelos (MLflow) | [GitHub](https://github.com/0DaikiHajime0/Proyecto2/blob/main/notebooks/03-model-training.ipynb) | [DagsHub](https://dagshub.com/0DaikiHajime0/Proyecto2/src/main/notebooks/03-model-training.ipynb) |
+| 04 - Componente agentico RAG | [GitHub](https://github.com/0DaikiHajime0/Proyecto2/blob/main/notebooks/04-agentic-rag.ipynb) | [DagsHub](https://dagshub.com/0DaikiHajime0/Proyecto2/src/main/notebooks/04-agentic-rag.ipynb) |
 
 ### Evaluacion online (simulada por streaming)
 
